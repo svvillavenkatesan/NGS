@@ -2,6 +2,10 @@
 
 A GitHub-ready number game system with separate Super Admin, Distributor, and Seller experiences; a Node.js API; durable storage; real-time results; prize, commission, and profit engines; and automated tests.
 
+> **Proprietary software — available for commercial licensing or sale.**
+>
+> This application and its business workflow are an original, privately owned software design. The source code is provided only for authorised evaluation and development. Copying, modifying, distributing, reselling, sublicensing, or operating this software without the owner's written permission is prohibited. For purchase, licensing, deployment, or customisation, contact the repository owner.
+
 ## Architecture
 
 ```text
@@ -79,4 +83,6 @@ curl -X POST http://localhost:4000/api/auth/login -H "content-type: application/
 
 ## License
 
-No license has been selected. Add one before distributing the repository publicly.
+Copyright © 2026. All rights reserved.
+
+This is proprietary commercial software and is **not open source**. No permission is granted to copy, modify, distribute, resell, sublicense, publish, or operate any part of this project without a separate written agreement from the owner. This private repository is maintained for authorised development, demonstration, deployment, and commercial evaluation only.
