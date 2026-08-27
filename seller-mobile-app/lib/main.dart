@@ -24,7 +24,7 @@ class App extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xff45d6a8), brightness: Brightness.dark),
+              seedColor: const Color(0xfff2b84b), brightness: Brightness.dark),
           useMaterial3: true),
       home: const Login());
 }
@@ -823,7 +823,7 @@ class _Entry extends State<Entry> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8, vertical: 7),
                     decoration: BoxDecoration(
-                        color: const Color(0xff0e1e31),
+                        color: const Color(0xff211133),
                         borderRadius: BorderRadius.circular(9)),
                     child: Column(children: [
                       Text(
@@ -835,7 +835,7 @@ class _Entry extends State<Entry> {
                           style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 14,
-                              color: Color(0xff75c8ff)))
+                              color: Color(0xffd7b5ff)))
                     ]))),
             const SizedBox(width: 6),
             Expanded(
@@ -981,7 +981,7 @@ class _Entry extends State<Entry> {
               height: 38,
               padding: const EdgeInsets.only(left: 8),
               decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: Color(0xff20364d)))),
+                  border: Border(bottom: BorderSide(color: Color(0xff4d3068)))),
               child: Row(children: [
                 Expanded(
                     child: Text(
@@ -1009,8 +1009,8 @@ class _Entry extends State<Entry> {
             child: Container(
                 padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
                 decoration: const BoxDecoration(
-                    color: Color(0xff0e1e31),
-                    border: Border(top: BorderSide(color: Color(0xff29415c)))),
+                    color: Color(0xff211133),
+                    border: Border(top: BorderSide(color: Color(0xff51326d)))),
                 child: Row(children: [
                   Expanded(
                       child: TextButton(
@@ -1064,7 +1064,7 @@ class Info extends StatelessWidget {
   Widget build(BuildContext c) => Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-          color: const Color(0xff0e1e31),
+          color: const Color(0xff211133),
           borderRadius: BorderRadius.circular(9)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         if (label.isNotEmpty)
