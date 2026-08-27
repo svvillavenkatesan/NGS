@@ -1,0 +1,15 @@
+{
+  "name": "number-game-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Four-tier number game and lottery management system",
+  "workspaces": ["backend-api"],
+  "scripts": {
+    "dev": "npm --workspace backend-api run dev",
+    "start": "npm --workspace backend-api start",
+    "test": "npm --workspace backend-api test",
+    "check": "npm --workspace backend-api run check"
+  },
+  "engines": { "node": ">=20" }
+}
+
