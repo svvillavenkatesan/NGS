@@ -648,8 +648,18 @@ function buildSaleReport(report) {
   const seller = store.users.find((item) => item.id === report.sellerId);
   const distributor = store.users.find((item) => item.id === report.distributorId);
   const corrections = store.reportCorrections.filter((item) => item.reportId === report.id);
-  const entries = store.tickets.filter((item) => item.reportId === report.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((ticket) => ({ transactionId: ticket.id, sequence: ticket.transactionSequence, timestamp: ticket.createdAt, time: new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(ticket.createdAt)), scheme: ticket.catalogSchemeName ?? ticket.scheme, enteredNumber: ticket.number, quantity: ticket.quantity, winningNumber: report.winningNumber, prizeAmount: ticket.prize, saleAmount: ticket.total, corrected: corrections.some((item) => item.transactionId === ticket.id) }));
-  return { ...reportSummary(report), seller: { id: report.sellerId, name: seller?.name ?? report.sellerName }, distributor: { id: report.distributorId, name: distributor?.name ?? report.distributorName }, entries, corrections: corrections.sort((a, b) => b.changedAt.localeCompare(a.changedAt)) };
+  const entries = store.tickets.filter((item) => item.reportId === report.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((ticket) => {
+    const bill = store.bills.find((item) => item.id === ticket.billId);
+    const result = report.winningNumber ? evaluateTicket(ticket.number, report.winningNumber, prizeSchemeForTicket(ticket), ticket.catalogPattern) : { prize: 0, match: null };
+    const unitPrize = Number(result.prize ?? 0);
+    const prizeAmount = unitPrize * ticket.quantity;
+    const ratedAmount = Number(ticket.rateSnapshot?.distributorRate ?? ticket.unitPrice) * ticket.quantity;
+    const margin = Math.max(0, Number(ticket.total) - ratedAmount);
+    const bonusPercentage = Number(ticket.rateSnapshot?.sellerCommissionPercentage ?? seller?.commissionPercentage ?? 0);
+    const bonusAmount = Math.round(margin * bonusPercentage) / 100;
+    return { transactionId: ticket.id, sequence: ticket.transactionSequence, timestamp: ticket.createdAt, date: ticket.businessDate ?? localDateKey(ticket.createdAt), time: new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(ticket.createdAt)), billNumber: bill?.billNumber ?? '—', scheme: ticket.catalogSchemeName ?? ticket.scheme, enteredNumber: ticket.number, quantity: ticket.quantity, rate: Number(ticket.unitPrice), winningNumber: report.winningNumber, matchRule: result.match, unitPrize, prizeAmount, saleAmount: ticket.total, bonusPercentage, bonusAmount, netAmount: Number(ticket.total) - bonusAmount - prizeAmount, corrected: corrections.some((item) => item.transactionId === ticket.id) };
+  });
+  return { ...reportSummary(report), totalBonus: entries.reduce((sum, item) => sum + item.bonusAmount, 0), totalNet: entries.reduce((sum, item) => sum + item.netAmount, 0), seller: { id: report.sellerId, name: seller?.name ?? report.sellerName }, distributor: { id: report.distributorId, name: distributor?.name ?? report.distributorName }, entries, corrections: corrections.sort((a, b) => b.changedAt.localeCompare(a.changedAt)) };
 }
 
 function buildSellerReportSuite(report) {

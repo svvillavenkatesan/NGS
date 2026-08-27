@@ -15,25 +15,25 @@ export function evaluateTicket(ticketNumber, winningNumber, scheme, pattern = ''
   if (type === 'FOUR_DIGIT') {
     const ticket = digitsOnly(ticketNumber, 4, 'ticketNumber');
     const prizes = scheme.prizes ?? {};
-    if (ticket === `${d}${a}${b}${c}`) return winner(prizes.four);
-    if (ticket.slice(1) === `${a}${b}${c}`) return winner(prizes.three);
-    if (ticket.slice(2) === `${b}${c}`) return winner(prizes.two);
-    if (ticket.slice(3) === c) return winner(prizes.one);
+    if (ticket === `${d}${a}${b}${c}`) return winner(prizes.four, 'DABC');
+    if (ticket.slice(1) === `${a}${b}${c}`) return winner(prizes.three, 'ABC');
+    if (ticket.slice(2) === `${b}${c}`) return winner(prizes.two, 'BC');
+    if (ticket.slice(3) === c) return winner(prizes.one, 'C');
   }
 
   if (type === 'THREE_DIGIT') {
     const ticket = digitsOnly(ticketNumber, 3, 'ticketNumber');
     const prizes = scheme.prizes ?? {};
-    if (ticket === `${a}${b}${c}`) return winner(prizes.three);
-    if (ticket.slice(1) === `${b}${c}`) return winner(prizes.two);
-    if (ticket.slice(2) === c) return winner(prizes.one);
+    if (ticket === `${a}${b}${c}`) return winner(prizes.three, 'ABC');
+    if (ticket.slice(1) === `${b}${c}`) return winner(prizes.two, 'BC');
+    if (ticket.slice(2) === c) return winner(prizes.one, 'C');
   }
 
   if (type === 'TWO_DIGIT') {
     const ticket = digitsOnly(ticketNumber, 2, 'ticketNumber');
     const pairs = { AB: `${a}${b}`, AC: `${a}${c}`, BC: `${b}${c}` };
     if ((pairs[pattern] ? ticket === pairs[pattern] : Object.values(pairs).includes(ticket))) {
-      return winner(scheme.prize ?? (premium ? 2000 : 1000));
+      return winner(scheme.prize ?? (premium ? 2000 : 1000), pairs[pattern] ? pattern : '2 DIGIT');
     }
   }
 
@@ -41,15 +41,15 @@ export function evaluateTicket(ticketNumber, winningNumber, scheme, pattern = ''
     const ticket = digitsOnly(ticketNumber, 1, 'ticketNumber');
     const singles = { A: a, B: b, C: c };
     if ((singles[pattern] ? ticket === singles[pattern] : Object.values(singles).includes(ticket))) {
-      return winner(scheme.prize ?? (premium ? 250 : 100));
+      return winner(scheme.prize ?? (premium ? 250 : 100), singles[pattern] ? pattern : '1 DIGIT');
     }
   }
 
   return { isWinner: false, prize: 0, match: null };
 }
 
-function winner(prize) {
+function winner(prize, match) {
   const amount = Number(prize);
   if (!Number.isFinite(amount) || amount < 0) throw new TypeError('Prize must be a non-negative number');
-  return { isWinner: true, prize: amount, match: true };
+  return { isWinner: true, prize: amount, match };
 }
