@@ -14,7 +14,7 @@ const request = async (path, options = {}) => {
   if (!response.ok) throw new Error(data.error ?? 'Request failed');
   return data;
 };
-const money = (value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value ?? 0);
+const money = (value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: Number(value ?? 0) % 1 ? 2 : 0, maximumFractionDigits: 2 }).format(value ?? 0);
 
 async function boot() {
   if (!token) return showLogin();
