@@ -1044,7 +1044,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 async function serveStatic(pathname, res) {
-  const pages = { '/': 'admin-portal/index.html', '/admin': 'admin-portal/index.html', '/distributor': 'distributor-portal/index.html', '/seller': 'seller-portal/index.html' };
+  const pages = { '/': 'admin-portal/index.html', '/admin': 'admin-portal/index.html', '/seller': 'seller-portal/index.html' };
   const relative = pages[pathname] ?? pathname.replace(/^\//, '');
   if (relative.includes('..') || !['.html', '.css', '.js'].includes(extname(relative))) return send(res, 404, { error: 'Not found' });
   try {

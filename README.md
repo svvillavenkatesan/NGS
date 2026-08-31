@@ -1,6 +1,6 @@
 # Multi-Tiered Number Game System
 
-A GitHub-ready number game system with separate Super Admin, Distributor, and Seller experiences; a Node.js API; durable storage; real-time results; prize, commission, and profit engines; and automated tests.
+A GitHub-ready direct-selling number game system with separate Super Admin and Seller experiences; a Node.js API; durable storage; real-time results; prize, commission, and profit engines; and automated tests.
 
 > **Proprietary software — available for commercial licensing or sale.**
 >
@@ -10,7 +10,6 @@ A GitHub-ready number game system with separate Super Admin, Distributor, and Se
 
 ```text
 admin-portal/             Super Admin web dashboard
-distributor-portal/       Distributor web dashboard
 seller-portal/            Browser-based Seller dashboard
 seller-mobile-app/        Flutter Android seller client
 backend-api/              Node.js HTTP and real-time API
@@ -28,19 +27,16 @@ npm test
 npm start
 ```
 
-The complete local portal starts at `http://localhost:4000`. Use `/admin`, `/distributor`, or `/seller`. The local API atomically persists business data in `backend-api/data/application-data.json`, so server restarts do not erase records. `database/schema.sql` remains the future PostgreSQL deployment model.
+The complete local portal starts at `http://localhost:4000`. Use `/admin` or `/seller`. The local API atomically persists business data in `backend-api/data/application-data.json`, so server restarts do not erase records. `database/schema.sql` remains the future PostgreSQL deployment model.
 
 ### Demo accounts
 
 | Portal | Phone | Password |
 |---|---:|---|
 | Super Admin | 9000000001 | Admin@123 |
-| Distributor | 9000000002 | 1111122222 |
 | Flutter Seller | 9000000004 | Seller@123 |
 
-The Admin portal includes a **Connect distributor** form. Each new distributor receives an isolated login and appears in the Admin's direct network list.
-During Distributor creation, Admin assigns permitted Lot Codes, schemes, and rates. Sellers see only their Distributor's assignments; other Distributor networks never appear.
-A Seller can receive a 0–50% commission percentage while continuing to use the Seller panel. There is no separate Sub-Distributor tier.
+The Admin portal creates **Direct Seller** accounts and assigns each Seller's permitted Lot Code, schemes, rates, and 0–50% commission. NGS has no Distributor or Sub-Distributor tier.
 
 Change all demo credentials and `JWT_SECRET` before exposing the service outside a local development machine.
 
@@ -59,9 +55,9 @@ curl -X POST http://localhost:4000/api/auth/login -H "content-type: application/
 - Four-, three-, two-, and one-digit schemes settle against a four-digit winning number.
 - Premium two- and one-digit defaults are INR 2,000 and INR 250; standard defaults are INR 1,000 and INR 100.
 - Bonuses activate only after a configured sales target and are deducted from the granting tier's profit.
-- User listings enforce direct-parent privacy; Super Admin sees Distributor identities only, while aggregate reporting can be layered onto the audit and ticket tables.
+- User listings expose only Direct Sellers belonging to the Super Admin.
 - Published results stream immediately and permanently settle matching Lot Code + Show + Date tickets as WIN/LOSE.
-- After a result is published, the Admin dashboard calculates a read-only per-distributor profit/loss report from sales margin and result-specific prize exposure. It never mutates ticket settlement state.
+- After a result is published, the Admin dashboard calculates a read-only per-Seller profit/loss report from sales margin and result-specific prize exposure. It never mutates ticket settlement state.
 - Before publishing, the Admin can enter any four-digit candidate in **Result profit preview** to calculate projected margin, prize exposure, and profit/loss without changing any data.
 - The Admin also receives up to ten unique active four-digit numbers taken from actual sold tickets, ranked by projected profit. Selecting an option copies it into the publish form; publishing still requires a separate confirmation click.
 - The Seller panel shows a live `unit price x quantity = total` calculation before the sale button, so the seller can confirm the amount before creating the ticket.

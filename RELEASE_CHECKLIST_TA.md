@@ -3,7 +3,7 @@
 ## GitHub-ல் சேமிக்கப்படுவது
 
 - Backend API source code
-- Super Admin, Distributor மற்றும் Seller web panels
+- Super Admin மற்றும் Direct Seller web panels
 - Android Seller application source code
 - PostgreSQL database schema
 - Docker configuration
@@ -22,7 +22,7 @@
 ## Release files
 
 - Android Seller: `NumberGame-Seller-Android.apk`
-- Windows EXE: தற்போது தேவையில்லை. Admin மற்றும் Distributor browser-ல் இயங்குகின்றன.
+- Windows EXE: தற்போது தேவையில்லை. Admin browser-ல் இயங்குகிறது; Seller Android app மற்றும் web panel பயன்படுத்தலாம்.
 - Server: Node.js backend + PostgreSQL production database
 
 ## Productionக்கு முன் கட்டாய வேலைகள்
