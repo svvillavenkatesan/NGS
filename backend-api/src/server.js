@@ -223,7 +223,7 @@ const routes = {
     schemeRates = deriveNumberTypeRates(distributorAccess.catalogSchemeRates);
     const commissionPercentage = body.role === 'SELLER' ? Number(body.commissionPercentage ?? 0) : 0;
     if (body.role === 'SELLER' && (!Number.isFinite(commissionPercentage) || commissionPercentage < 0 || commissionPercentage > 50)) return fail(400, 'Seller commission percentage must be between 0 and 50');
-    const record = createRecord('users', { parentId: user.id, role: 'SELLER', name: body.name.trim(), phone: String(body.phone), passwordHash: hashPassword(body.password), isActive: true, commissionPercentage, schemeRates, ...distributorAccess });
+    const record = createRecord('users', { parentId: user.id, role: 'SELLER', name: body.name.trim(), phone: String(body.phone), passwordHash: hashPassword(body.password), isActive: true, commissionPercentage, schemeRates, lotCodeGraceMinutes: { [distributorAccess.lotCodeId]: validateGraceMinutes(body.graceMinutes) }, ...distributorAccess });
     audit(user.id, 'USER_CREATED', 'user', record.id, { role: record.role });
     return created(publicUser(record));
   },
@@ -254,7 +254,8 @@ const routes = {
     seller.catalogSchemeRates = mergeCatalogSchemeRates(seller.lotCodeSchemeRates);
     seller.schemeRates = deriveNumberTypeRates(seller.catalogSchemeRates);
     seller.commissionPercentage = commissionPercentage;
-    audit(user.id, 'SELLER_SETTINGS_UPDATED', 'user', seller.id, { lotCodeId: access.lotCodeId, catalogSchemeRates: access.catalogSchemeRates, commissionPercentage });
+    seller.lotCodeGraceMinutes = { ...(seller.lotCodeGraceMinutes ?? {}), [access.lotCodeId]: validateGraceMinutes(body.graceMinutes) };
+    audit(user.id, 'SELLER_SETTINGS_UPDATED', 'user', seller.id, { lotCodeId: access.lotCodeId, catalogSchemeRates: access.catalogSchemeRates, commissionPercentage, graceMinutes: seller.lotCodeGraceMinutes[access.lotCodeId] });
     return ok(publicUser(seller));
   },
   'POST /api/contests': ({ body, user }) => {
@@ -401,7 +402,7 @@ const routes = {
     requireRole(user, 'SUPER_ADMIN');
     if (!/^\d{4}$/.test(String(body.winningNumber))) return fail(400, 'Winning number must contain four digits');
     const scope = validateResultScope(body);
-    validateResultPublishTime(scope);
+    validateResultPublishTime(scope, user);
     return ok(buildResultPreview(String(body.winningNumber), scope));
   },
   'GET /api/reports/result-candidates': ({ user, url }) => {
@@ -812,12 +813,12 @@ function validateResultScope(body) {
   return { boardId: board.id, boardCode: board.code, boardName: board.name, showId: show.id, showLabel: show.label, resultDate };
 }
 
-function validateResultPublishTime(scope) {
+function validateResultPublishTime(scope, user) {
   const board = store.settings.boards.find((item) => item.id === scope.boardId);
   const show = schedulesForDate(board, scope.resultDate).find((item) => item.id === scope.showId);
   const currentDate = localDateKey();
   const currentMinutes = minutesInTimeZone();
-  const maximumGrace = Math.max(0, ...store.users.filter((item) => item.role === 'SELLER' && item.parentId === 'admin-1' && (item.lotCodeIds ?? []).includes(scope.boardId)).map((item) => Number(item.lotCodeGraceMinutes?.[scope.boardId]?.[scope.showId] ?? 0)));
+  const maximumGrace = Math.max(0, ...store.users.filter((item) => item.role === 'SELLER' && item.parentId === user.id && item.isActive && (item.lotCodeIds ?? []).includes(scope.boardId)).map((item) => Number(item.lotCodeGraceMinutes?.[scope.boardId]?.[scope.showId] ?? 0)));
   if (resultPublishReady(show, scope.resultDate, currentDate, currentMinutes, maximumGrace)) return;
   const error = new Error(scope.resultDate > currentDate ? 'A future Result date cannot be published' : `Result can be published only one minute after ${show?.label ?? 'the Show'} entry closes`);
   error.status = 409;

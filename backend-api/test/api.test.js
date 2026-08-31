@@ -32,11 +32,13 @@ test('NGS direct Seller workflow', async (context) => {
   assert.deepEqual(directSeller.data.lotCodeIds, ['kerala']);
   assert.equal(directSeller.data.commissionPercentage, 20);
 
-  const updatedSeller = await json('/api/users/seller-settings', admin, { method: 'PUT', body: JSON.stringify({ sellerId: directSeller.data.id, lotCodeId: 'dear', catalogSchemeRates: { 'scheme-a': { enabled: true, rate: 10.6 }, 'scheme-4d-60-2l': { enabled: true, rate: 39 } }, commissionPercentage: 25, actionPassword: 'Admin@123' }) });
+  const updatedSeller = await json('/api/users/seller-settings', admin, { method: 'PUT', body: JSON.stringify({ sellerId: directSeller.data.id, lotCodeId: 'dear', catalogSchemeRates: { 'scheme-a': { enabled: true, rate: 10.6 }, 'scheme-4d-60-2l': { enabled: true, rate: 39 } }, commissionPercentage: 25, graceMinutes: { show1: 2, show2: 0, show3: 5 }, actionPassword: 'Admin@123' }) });
   assert.equal(updatedSeller.response.status, 200);
   assert.deepEqual(updatedSeller.data.lotCodeIds, ['kerala', 'dear']);
   assert.equal(updatedSeller.data.lotCodeSchemeRates.dear['scheme-4d-60-2l'].enabled, true);
   assert.equal(updatedSeller.data.commissionPercentage, 25);
+  assert.equal(updatedSeller.data.lotCodeGraceMinutes.dear.show1, 2);
+  assert.equal(updatedSeller.data.lotCodeGraceMinutes.dear.show3, 5);
 
   const ownerControl = await json('/api/owner/control', owner);
   assert.equal(ownerControl.response.status, 200);
