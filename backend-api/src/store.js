@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { hashPassword } from './auth.js';
+import { hashPassword, verifyPassword } from './auth.js';
 
 const now = () => new Date().toISOString();
 const user = (id, parentId, role, name, phone, password, schemeRates) => ({ id, parentId, role, name, phone, passwordHash: hashPassword(password), isActive: true, createdAt: now(), ...(schemeRates ? { schemeRates } : {}) });
@@ -89,6 +89,16 @@ store.users = store.users.filter((item) => !['SUB_DISTRIBUTOR', 'DISTRIBUTOR'].i
 store.settings.subDistributorEnabled = false;
 store.settings.maxSellers ??= 2000;
 if (!store.users.some((item) => item.role === 'OWNER')) store.users.unshift(user('owner-1', null, 'OWNER', 'System Owner', '9000000000', 'Owner@123'));
+if (process.env.NODE_ENV === 'production') {
+  for (const [role, demoPassword, environmentKey] of [['OWNER', 'Owner@123', 'OWNER_INITIAL_PASSWORD'], ['SUPER_ADMIN', 'Admin@123', 'ADMIN_INITIAL_PASSWORD']]) {
+    const account = store.users.find((item) => item.role === role && verifyPassword(demoPassword, item.passwordHash));
+    if (!account) continue;
+    const replacement = String(process.env[environmentKey] ?? '');
+    if (replacement.length < 12) throw new Error(`${environmentKey} with at least 12 characters is required because a demo ${role} password is still active`);
+    account.passwordHash = hashPassword(replacement);
+    account.sessionVersion = Number(account.sessionVersion ?? 0) + 1;
+  }
+}
 const usedSuperAdminCodes = new Set(store.users.filter((item) => item.role === 'SUPER_ADMIN' && /^\d{8}$/.test(String(item.superAdminCode ?? ''))).map((item) => item.superAdminCode));
 for (const account of store.users.filter((item) => item.role === 'SUPER_ADMIN')) {
   account.parentId ??= 'owner-1';
@@ -103,6 +113,8 @@ for (const account of store.users.filter((item) => item.role === 'SUPER_ADMIN'))
     account.superAdminCode = `${prefix}${String(sequence).padStart(4, '0')}`;
     usedSuperAdminCodes.add(account.superAdminCode);
   }
+  account.resultPasswordHash ??= account.id === 'admin-1' ? store.security.resultPasswordHash : null;
+  account.managementPasswordHash ??= account.id === 'admin-1' ? store.security.managementPasswordHash : null;
 }
 store.saleReports ??= [];
 store.reportCorrections ??= [];

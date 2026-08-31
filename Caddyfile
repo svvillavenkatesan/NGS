@@ -1,0 +1,8 @@
+{$DOMAIN_NAME} {
+  encode zstd gzip
+  reverse_proxy api:4000
+  log {
+    output stdout
+    format json
+  }
+}

@@ -13,6 +13,7 @@ import { licenseStatus, requireOperationalLicense } from './license.js';
 const port = Number(process.env.PORT ?? 4000);
 const root = resolve(import.meta.dirname, '../..');
 const clients = new Set();
+const loginAttempts = new Map();
 migrateLegacyReports();
 persistStore();
 
@@ -417,7 +418,7 @@ const routes = {
   },
   'GET /api/reports/weekly-accounts': ({ user, url }) => {
     requireRole(user, 'SUPER_ADMIN');
-    return ok(buildWeeklyAccounts(url.searchParams.get('weekStart') || undefined));
+    return ok(buildWeeklyAccounts(url.searchParams.get('weekStart') || undefined, user.id));
   },
   'GET /api/reports/distributor-weekly': ({ user, url }) => {
     requireRole(user, 'DISTRIBUTOR');
@@ -444,7 +445,7 @@ const routes = {
     if (!Number.isFinite(amount) || amount <= 0) return fail(400, 'Received amount must be greater than zero');
     const payment = createRecord('weeklyPayments', { distributorId: account.id, accountRole: account.role, weekStart: range.weekStart, weekEnd: range.weekEnd, amount, reference: String(body.reference ?? '').trim().slice(0, 100), receivedBy: user.id });
     audit(user.id, 'WEEKLY_PAYMENT_RECORDED', 'weeklyPayment', payment.id, { accountId: account.id, accountRole: account.role, weekStart: range.weekStart, amount });
-    return created({ payment, accounts: buildWeeklyAccounts(range.weekStart) });
+    return created({ payment, accounts: buildWeeklyAccounts(range.weekStart, user.id) });
   },
   'POST /api/daily-expenses': ({ body, user }) => {
     requireRole(user, 'SUPER_ADMIN');
@@ -455,7 +456,7 @@ const routes = {
     if (!Number.isFinite(amount) || amount <= 0) return fail(400, 'Expense amount must be greater than zero');
     const expense = createRecord('dailyExpenses', { expenseDate, amount, note: String(body.note ?? '').trim().slice(0, 150), recordedBy: user.id });
     audit(user.id, 'DAILY_EXPENSE_RECORDED', 'dailyExpense', expense.id, { expenseDate, amount });
-    return created({ expense, accounts: buildWeeklyAccounts(expenseDate) });
+    return created({ expense, accounts: buildWeeklyAccounts(expenseDate, user.id) });
   },
   'GET /api/dashboard': ({ user }) => ok(buildDashboard(user)),
   'PUT /api/security/action-passwords': ({ body, user }) => {
@@ -465,8 +466,8 @@ const routes = {
     const resultPassword = String(body.resultPassword ?? '');
     const managementPassword = String(body.managementPassword ?? '');
     if (resultPassword.length < 8 || managementPassword.length < 8) return fail(400, 'Each security password must contain at least 8 characters');
-    store.security.resultPasswordHash = hashPassword(resultPassword);
-    store.security.managementPasswordHash = hashPassword(managementPassword);
+    account.resultPasswordHash = hashPassword(resultPassword);
+    account.managementPasswordHash = hashPassword(managementPassword);
     audit(user.id, 'ACTION_PASSWORDS_UPDATED', 'security', null, {});
     return ok({ resultPasswordConfigured: true, managementPasswordConfigured: true });
   },
@@ -667,7 +668,7 @@ function reportMatchesResultScope(report, scope) {
   return report.boardId === scope.boardId && report.showId === scope.showId && report.businessDate === scope.resultDate;
 }
 function visibleSaleReports(user) {
-  if (user.role === 'SUPER_ADMIN') return store.saleReports;
+  if (user.role === 'SUPER_ADMIN') { const sellerIds = new Set(descendantsOf(user.id).filter((item) => item.role === 'SELLER').map((item) => item.id)); return store.saleReports.filter((item) => sellerIds.has(item.sellerId)); }
   if (user.role === 'SELLER') return store.saleReports.filter((item) => item.sellerId === user.id);
   return [];
 }
@@ -873,11 +874,11 @@ function buildDashboard(user) {
     users: visibleUsers(user).length,
     recentTickets: tickets.slice(-100).reverse(),
     bonusRules: user.role === 'SUPER_ADMIN' ? store.bonusRules.filter((item) => item.ownerId === user.id) : undefined,
-    directSellerPerformance: user.role === 'SUPER_ADMIN' ? buildDirectSellerPerformance() : undefined,
+    directSellerPerformance: user.role === 'SUPER_ADMIN' ? buildDirectSellerPerformance(undefined, null, user.id) : undefined,
     sellerCapacity: user.role === 'SUPER_ADMIN' ? (() => { const maximum = Number(store.users.find((item) => item.id === user.id)?.sellerLimit ?? store.settings.maxSellers ?? 2000); const current = activeSellerCount(user.id); return { superAdminCode: store.users.find((item) => item.id === user.id)?.superAdminCode, maximum, current, remaining: Math.max(0, maximum - current) }; })() : undefined,
-    actionSecurity: user.role === 'SUPER_ADMIN' ? { resultPasswordConfigured: Boolean(store.security.resultPasswordHash), managementPasswordConfigured: Boolean(store.security.managementPasswordHash) } : undefined,
+    actionSecurity: user.role === 'SUPER_ADMIN' ? (() => { const account = store.users.find((item) => item.id === user.id); return { resultPasswordConfigured: Boolean(account?.resultPasswordHash), managementPasswordConfigured: Boolean(account?.managementPasswordHash) }; })() : undefined,
     license: licenseStatus(),
-    weeklyAccounts: user.role === 'SUPER_ADMIN' ? buildWeeklyAccounts() : undefined
+    weeklyAccounts: user.role === 'SUPER_ADMIN' ? buildWeeklyAccounts(undefined, user.id) : undefined
     ,distributorAccounts: user.role === 'DISTRIBUTOR' ? buildDistributorAccounts(user) : undefined
     ,recentDraws: user.role === 'SUPER_ADMIN'
       ? [...store.draws].reverse().slice(0, 100)
@@ -971,9 +972,9 @@ function weekRange(input) {
   return { weekStart, weekEnd };
 }
 
-function buildWeeklyAccounts(selectedDate) {
+function buildWeeklyAccounts(selectedDate, superAdminId = 'admin-1') {
   const range = weekRange(selectedDate);
-  const rows = store.users.filter((item) => item.parentId === 'admin-1' && ['DISTRIBUTOR', 'SELLER'].includes(item.role)).map((account) => {
+  const rows = store.users.filter((item) => item.parentId === superAdminId && ['DISTRIBUTOR', 'SELLER'].includes(item.role)).map((account) => {
     const sellerIds = account.role === 'SELLER' ? [account.id] : descendantsOf(account.id).filter((item) => item.role === 'SELLER').map((item) => item.id);
     const tickets = store.tickets.filter((ticket) => sellerIds.includes(ticket.sellerId) && (ticket.businessDate ?? localDateKey(ticket.createdAt)) >= range.weekStart && (ticket.businessDate ?? localDateKey(ticket.createdAt)) <= range.weekEnd);
     const quantity = tickets.reduce((sum, item) => sum + item.quantity, 0);
@@ -988,10 +989,11 @@ function buildWeeklyAccounts(selectedDate) {
   const cursor = new Date(`${range.weekStart}T12:00:00+05:30`);
   for (let index = 0; index < 7; index += 1) {
     const date = localDateKey(cursor);
-    const dayTickets = store.tickets.filter((ticket) => (ticket.businessDate ?? localDateKey(ticket.createdAt)) === date);
+    const sellerIds = new Set(store.users.filter((item) => item.parentId === superAdminId && item.role === 'SELLER').map((item) => item.id));
+    const dayTickets = store.tickets.filter((ticket) => sellerIds.has(ticket.sellerId) && (ticket.businessDate ?? localDateKey(ticket.createdAt)) === date);
     const sales = dayTickets.reduce((sum, item) => sum + item.total, 0);
     const prizes = dayTickets.reduce((sum, item) => sum + item.prize, 0);
-    const expenses = store.dailyExpenses.filter((item) => item.expenseDate === date).reduce((sum, item) => sum + item.amount, 0);
+    const expenses = store.dailyExpenses.filter((item) => item.recordedBy === superAdminId && item.expenseDate === date).reduce((sum, item) => sum + item.amount, 0);
     days.push({ date, quantity: dayTickets.reduce((sum, item) => sum + item.quantity, 0), sales, prizes, expenses, netAmount: sales - prizes - expenses });
     cursor.setDate(cursor.getDate() + 1);
   }
@@ -999,10 +1001,10 @@ function buildWeeklyAccounts(selectedDate) {
   return { ...range, totalSales: rows.reduce((sum, item) => sum + item.sales, 0), totalPrizes: rows.reduce((sum, item) => sum + item.prizes, 0), totalExpenses, finalNetAmount: days.reduce((sum, item) => sum + item.netAmount, 0), totalDue: rows.reduce((sum, item) => sum + item.netDue, 0), totalReceived: rows.reduce((sum, item) => sum + item.received, 0), totalBalance: rows.reduce((sum, item) => sum + item.balance, 0), days, rows };
 }
 
-function buildDirectSellerPerformance(previewWinningNumber = null, scope = null) {
+function buildDirectSellerPerformance(previewWinningNumber = null, scope = null, superAdminId = 'admin-1') {
   const latestDraw = store.draws.at(-1) ?? null;
   const winningNumber = previewWinningNumber ?? latestDraw?.winningNumber ?? null;
-  return store.users.filter((item) => item.role === 'SELLER' && item.parentId === 'admin-1').map((seller) => {
+  return store.users.filter((item) => item.role === 'SELLER' && item.parentId === superAdminId).map((seller) => {
     const tickets = store.tickets.filter((ticket) => ticket.sellerId === seller.id && (scope ? ticketMatchesResultScope(ticket, scope) : latestDraw ? ticket.drawId === latestDraw.id : ticket.status === 'ACTIVE'));
     const quantity = tickets.reduce((sum, ticket) => sum + ticket.quantity, 0);
     const sales = tickets.reduce((sum, ticket) => sum + ticket.total, 0);
@@ -1082,7 +1084,7 @@ function nextSuperAdminCode() {
 }
 function requireActionPassword(body, user, type) {
   const account = store.users.find((item) => item.id === user.id);
-  const stored = type === 'result' ? store.security.resultPasswordHash : store.security.managementPasswordHash;
+  const stored = type === 'result' ? account?.resultPasswordHash : account?.managementPasswordHash;
   const valid = verifyPassword(String(body.actionPassword ?? ''), stored ?? account.passwordHash);
   if (!valid) { const error = new Error(`${type === 'result' ? 'Result' : 'Management'} password is incorrect`); error.status = 403; throw error; }
 }
@@ -1109,6 +1111,7 @@ const server = http.createServer(async (req, res) => {
     }
     const handler = routes[`${req.method} ${url.pathname}`];
     if (handler) {
+      if (url.pathname === '/api/auth/login') enforceLoginRateLimit(req);
       const body = ['POST', 'PUT', 'PATCH'].includes(req.method) ? await readJson(req) : {};
       const user = url.pathname === '/api/auth/login' || url.pathname === '/health' ? null : authenticate(req);
       if (user?.role === 'SELLER' && process.env.NODE_ENV === 'production' && !isAndroidSellerRequest(req)) return send(res, 403, { error: 'Seller Entry is available only in the Android app' });
@@ -1131,16 +1134,25 @@ async function serveStatic(pathname, res) {
   try {
     const data = await readFile(resolve(root, relative));
     const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
-    res.writeHead(200, { 'Content-Type': types[extname(relative)] }); res.end(data);
+    res.writeHead(200, { 'Content-Type': types[extname(relative)], ...securityHeaders(), 'Cache-Control': relative.endsWith('.html') ? 'no-store' : 'public, max-age=3600' }); res.end(data);
   } catch { send(res, 404, { error: 'Not found' }); }
 }
-function readJson(req) { return new Promise((resolveBody, reject) => { let raw = ''; req.on('data', (chunk) => { raw += chunk; if (raw.length > 1_000_000) reject(new Error('Request too large')); }); req.on('end', () => { try { resolveBody(raw ? JSON.parse(raw) : {}); } catch (error) { reject(error); } }); }); }
+function readJson(req) { return new Promise((resolveBody, reject) => { let raw = ''; let stopped = false; req.on('data', (chunk) => { if (stopped) return; raw += chunk; if (raw.length > 1_000_000) { stopped = true; const error = new Error('Request too large'); error.status = 413; reject(error); } }); req.on('end', () => { if (stopped) return; try { resolveBody(raw ? JSON.parse(raw) : {}); } catch (error) { error.status = 400; reject(error); } }); }); }
 const ok = (body) => ({ status: 200, body });
 const created = (body) => ({ status: 201, body });
 const fail = (status, message) => ({ status, body: { error: message } });
 const corsHeaders = () => ({ 'Access-Control-Allow-Origin': process.env.CORS_ORIGIN ?? '*', 'Access-Control-Allow-Headers': 'authorization, content-type, x-seller-client', 'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS' });
-function send(res, status, body) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders() }); res.end(JSON.stringify(body)); }
-function empty(res, status) { res.writeHead(status, corsHeaders()); res.end(); }
+const securityHeaders = () => ({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Permissions-Policy': 'camera=(), microphone=(), geolocation=()', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'", ...(process.env.NODE_ENV === 'production' ? { 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' } : {}) });
+function send(res, status, body) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', ...securityHeaders(), ...corsHeaders() }); res.end(JSON.stringify(body)); }
+function empty(res, status) { res.writeHead(status, { ...securityHeaders(), ...corsHeaders() }); res.end(); }
+function enforceLoginRateLimit(req) {
+  const key = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? 'unknown').split(',')[0].trim();
+  const now = Date.now();
+  const record = loginAttempts.get(key);
+  if (!record || now - record.startedAt > 10 * 60 * 1000) { loginAttempts.set(key, { startedAt: now, count: 1 }); return; }
+  record.count += 1;
+  if (record.count > 20) { const error = new Error('Too many login attempts. Try again after 10 minutes.'); error.status = 429; throw error; }
+}
 
 if (process.env.NODE_ENV !== 'test') {
   initializeDatabasePersistence().then(({ mode }) => server.listen(port, () => console.log(`Number Game System (${mode}): http://localhost:${port}`))).catch((error) => { console.error(`Startup failed: ${error.message}`); process.exitCode = 1; });

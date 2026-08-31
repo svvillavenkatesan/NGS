@@ -4,8 +4,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-number_game}
       POSTGRES_USER: ${POSTGRES_USER:-number_game}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-password}
-    ports: ["5432:5432"]
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
       - number_game_data:/var/lib/postgresql/data
       - ./database/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
@@ -15,17 +14,30 @@ services:
       timeout: 5s
       retries: 10
   api:
-    image: node:20-alpine
-    working_dir: /app
-    command: sh -c "npm install && npm start"
+    build: .
+    restart: unless-stopped
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-number_game}:${POSTGRES_PASSWORD:-change-this-password}@postgres:5432/${POSTGRES_DB:-number_game}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:4000}
-    ports: ["4000:4000"]
-    volumes: [".:/app"]
+      DATABASE_URL: postgresql://${POSTGRES_USER:-number_game}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-number_game}
+      CORS_ORIGIN: ${CORS_ORIGIN:?Set CORS_ORIGIN in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      OWNER_INITIAL_PASSWORD: ${OWNER_INITIAL_PASSWORD:?Set OWNER_INITIAL_PASSWORD in .env}
+      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:?Set ADMIN_INITIAL_PASSWORD in .env}
     depends_on:
       postgres:
         condition: service_healthy
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN_NAME: ${DOMAIN_NAME:?Set DOMAIN_NAME in .env}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api]
 volumes:
   number_game_data:
+  caddy_data:
+  caddy_config:

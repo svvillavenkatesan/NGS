@@ -1,0 +1,9 @@
+.git
+.env
+node_modules
+backend-api/data
+backups
+reports
+releases
+seller-mobile-app/build
+seller-mobile-app/.dart_tool

@@ -10,6 +10,7 @@ A GitHub-ready direct-selling number game system with separate Super Admin and S
 
 ```text
 admin-portal/             Super Admin web dashboard
+owner-portal/             System Owner controls Super Admins and limits
 seller-portal/            Browser-based Seller dashboard
 seller-mobile-app/        Flutter Android seller client
 backend-api/              Node.js HTTP and real-time API
@@ -33,12 +34,21 @@ The complete local portal starts at `http://localhost:4000`. Use `/admin` or `/s
 
 | Portal | Phone | Password |
 |---|---:|---|
+| System Owner | 9000000000 | Owner@123 |
 | Super Admin | 9000000001 | Admin@123 |
 | Flutter Seller | 9000000004 | Seller@123 |
 
 The Admin portal creates **Direct Seller** accounts and assigns each Seller's permitted Lot Code, schemes, rates, and 0–50% commission. NGS has no Distributor or Sub-Distributor tier.
 
 Change all demo credentials and `JWT_SECRET` before exposing the service outside a local development machine.
+
+## HTTPS production deployment
+
+1. Buy a lawful domain and point its DNS `A`/`AAAA` record to the production server.
+2. Copy `.env.production.example` to `.env` and replace every example secret and domain value.
+3. Run `docker compose up -d --build`. Caddy obtains and renews the HTTPS certificate automatically.
+4. Keep PostgreSQL private; only ports 80 and 443 are published.
+5. Change the seeded Owner and Super Admin passwords immediately, then create encrypted off-server backups.
 
 ## Demo API
 
