@@ -1150,7 +1150,7 @@ async function serveStatic(pathname, res) {
   try {
     const data = await readFile(resolve(root, relative));
     const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
-    res.writeHead(200, { 'Content-Type': types[extname(relative)], ...securityHeaders(), 'Cache-Control': relative.endsWith('.html') ? 'no-store' : 'public, max-age=3600' }); res.end(data);
+    res.writeHead(200, { 'Content-Type': types[extname(relative)], ...securityHeaders(), 'Cache-Control': 'no-store' }); res.end(data);
   } catch { send(res, 404, { error: 'Not found' }); }
 }
 function readJson(req) { return new Promise((resolveBody, reject) => { let raw = ''; let stopped = false; req.on('data', (chunk) => { if (stopped) return; raw += chunk; if (raw.length > 1_000_000) { stopped = true; const error = new Error('Request too large'); error.status = 413; reject(error); } }); req.on('end', () => { if (stopped) return; try { resolveBody(raw ? JSON.parse(raw) : {}); } catch (error) { error.status = 400; reject(error); } }); }); }
