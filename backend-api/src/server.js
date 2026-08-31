@@ -231,6 +231,22 @@ const routes = {
     audit(user.id, 'DISTRIBUTOR_SETTINGS_UPDATED', 'user', distributor.id, { lotCodeId: access.lotCodeId, catalogSchemeRates: access.catalogSchemeRates, graceMinutes: distributor.lotCodeGraceMinutes[access.lotCodeId] });
     return ok(publicUser(distributor));
   },
+  'PUT /api/users/seller-settings': ({ body, user }) => {
+    requireRole(user, 'SUPER_ADMIN');
+    requireActionPassword(body, user, 'management');
+    const seller = store.users.find((item) => item.id === body.sellerId && item.role === 'SELLER' && item.parentId === user.id);
+    if (!seller) return fail(404, 'Seller not found');
+    const access = validateDistributorLotAssignment(body.lotCodeId, body.catalogSchemeRates);
+    const commissionPercentage = Number(body.commissionPercentage ?? seller.commissionPercentage ?? 0);
+    if (!Number.isFinite(commissionPercentage) || commissionPercentage < 0 || commissionPercentage > 50) return fail(400, 'Seller commission percentage must be between 0 and 50');
+    seller.lotCodeSchemeRates = { ...(seller.lotCodeSchemeRates ?? {}), [access.lotCodeId]: access.catalogSchemeRates };
+    seller.lotCodeIds = Object.keys(seller.lotCodeSchemeRates);
+    seller.catalogSchemeRates = mergeCatalogSchemeRates(seller.lotCodeSchemeRates);
+    seller.schemeRates = deriveNumberTypeRates(seller.catalogSchemeRates);
+    seller.commissionPercentage = commissionPercentage;
+    audit(user.id, 'SELLER_SETTINGS_UPDATED', 'user', seller.id, { lotCodeId: access.lotCodeId, catalogSchemeRates: access.catalogSchemeRates, commissionPercentage });
+    return ok(publicUser(seller));
+  },
   'POST /api/contests': ({ body, user }) => {
     requireRole(user, 'SUPER_ADMIN');
     const name = String(body.name ?? '').trim();

@@ -32,6 +32,12 @@ test('NGS direct Seller workflow', async (context) => {
   assert.deepEqual(directSeller.data.lotCodeIds, ['kerala']);
   assert.equal(directSeller.data.commissionPercentage, 20);
 
+  const updatedSeller = await json('/api/users/seller-settings', admin, { method: 'PUT', body: JSON.stringify({ sellerId: directSeller.data.id, lotCodeId: 'dear', catalogSchemeRates: { 'scheme-a': { enabled: true, rate: 10.6 }, 'scheme-4d-60-2l': { enabled: true, rate: 39 } }, commissionPercentage: 25, actionPassword: 'Admin@123' }) });
+  assert.equal(updatedSeller.response.status, 200);
+  assert.deepEqual(updatedSeller.data.lotCodeIds, ['kerala', 'dear']);
+  assert.equal(updatedSeller.data.lotCodeSchemeRates.dear['scheme-4d-60-2l'].enabled, true);
+  assert.equal(updatedSeller.data.commissionPercentage, 25);
+
   const ownerControl = await json('/api/owner/control', owner);
   assert.equal(ownerControl.response.status, 200);
   assert.equal(ownerControl.data.currentSellers, 2);
@@ -62,7 +68,7 @@ test('NGS direct Seller workflow', async (context) => {
   const directToken = await login('9555555555', 'Seller@789');
   const directDashboard = await json('/api/dashboard', directToken);
   assert.equal(directDashboard.response.status, 200);
-  assert.deepEqual(directDashboard.data.boards.map((item) => item.id), ['kerala']);
+  assert.deepEqual(directDashboard.data.boards.map((item) => item.id), ['kerala', 'dear']);
   assert.equal(directDashboard.data.schemeCatalog.some((item) => item.id === 'scheme-3d-30-15k'), true);
 
   const sale = await json('/api/tickets/batch', directToken, { method: 'POST', body: JSON.stringify({ items: [
