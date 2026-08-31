@@ -35,11 +35,25 @@ test('NGS direct Seller workflow', async (context) => {
   const ownerControl = await json('/api/owner/control', owner);
   assert.equal(ownerControl.response.status, 200);
   assert.equal(ownerControl.data.currentSellers, 2);
-  const sellerLimit = await json('/api/owner/seller-limit', owner, { method: 'PUT', body: JSON.stringify({ maxSellers: 2, ownerPassword: 'Owner@123' }) });
+  assert.match(ownerControl.data.superAdmins.find((item) => item.id === 'admin-1').superAdminCode, /^\d{8}$/);
+  const newAdminOne = await json('/api/owner/super-admin', owner, { method: 'POST', body: JSON.stringify({ name: 'Branch Admin One', phone: '9777777771', password: 'Branch@123', sellerLimit: 1, ownerPassword: 'Owner@123' }) });
+  const newAdminTwo = await json('/api/owner/super-admin', owner, { method: 'POST', body: JSON.stringify({ name: 'Branch Admin Two', phone: '9777777772', password: 'Branch@124', sellerLimit: 5, ownerPassword: 'Owner@123' }) });
+  assert.equal(newAdminOne.response.status, 201);
+  assert.equal(newAdminTwo.response.status, 201);
+  assert.match(newAdminOne.data.superAdminCode, /^\d{8}$/);
+  assert.equal(Number(newAdminTwo.data.superAdminCode), Number(newAdminOne.data.superAdminCode) + 1);
+  const sellerLimit = await json('/api/owner/seller-limit', owner, { method: 'PUT', body: JSON.stringify({ superAdminId: 'admin-1', sellerLimit: 2, ownerPassword: 'Owner@123' }) });
   assert.equal(sellerLimit.response.status, 200);
   assert.equal(sellerLimit.data.remaining, 0);
   const blockedByLimit = await json('/api/users', admin, { method: 'POST', body: JSON.stringify({ role: 'SELLER', name: 'Over Limit', phone: '9666666666', password: 'Seller@999', lotCodeId: 'kerala', catalogSchemeRates: { 'scheme-a': { enabled: true, rate: 10.6 } }, commissionPercentage: 0, actionPassword: 'Admin@123' }) });
   assert.equal(blockedByLimit.response.status, 409);
+
+  const branchAdmin = await login('9777777771', 'Branch@123');
+  const branchSeller = await json('/api/users', branchAdmin, { method: 'POST', body: JSON.stringify({ role: 'SELLER', name: 'Branch Seller', phone: '9777777781', password: 'Seller@321', lotCodeId: 'kerala', catalogSchemeRates: { 'scheme-a': { enabled: true, rate: 10.6 } }, commissionPercentage: 0, actionPassword: 'Branch@123' }) });
+  assert.equal(branchSeller.response.status, 201);
+  assert.equal(branchSeller.data.parentId, newAdminOne.data.id);
+  const branchOverLimit = await json('/api/users', branchAdmin, { method: 'POST', body: JSON.stringify({ role: 'SELLER', name: 'Branch Seller Two', phone: '9777777782', password: 'Seller@322', lotCodeId: 'kerala', catalogSchemeRates: { 'scheme-a': { enabled: true, rate: 10.6 } }, commissionPercentage: 0, actionPassword: 'Branch@123' }) });
+  assert.equal(branchOverLimit.response.status, 409);
 
   const directToken = await login('9555555555', 'Seller@789');
   const directDashboard = await json('/api/dashboard', directToken);

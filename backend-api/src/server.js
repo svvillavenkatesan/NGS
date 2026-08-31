@@ -51,20 +51,39 @@ const routes = {
   'GET /api/license/status': () => ok(licenseStatus()),
   'GET /api/owner/control': ({ user }) => {
     requireRole(user, 'OWNER');
-    const currentSellers = store.users.filter((item) => item.role === 'SELLER' && item.isActive).length;
-    const maxSellers = Number(store.settings.maxSellers ?? 2000);
-    return ok({ maxSellers, currentSellers, remaining: Math.max(0, maxSellers - currentSellers), superAdmins: store.users.filter((item) => item.role === 'SUPER_ADMIN').map(publicUser) });
+    const superAdmins = store.users.filter((item) => item.role === 'SUPER_ADMIN').map((item) => {
+      const currentSellers = activeSellerCount(item.id);
+      const sellerLimit = Number(item.sellerLimit ?? store.settings.maxSellers ?? 2000);
+      return { ...publicUser(item), currentSellers, sellerLimit, remaining: Math.max(0, sellerLimit - currentSellers) };
+    });
+    return ok({ totalSuperAdmins: superAdmins.length, currentSellers: superAdmins.reduce((sum, item) => sum + item.currentSellers, 0), totalCapacity: superAdmins.reduce((sum, item) => sum + item.sellerLimit, 0), superAdmins });
+  },
+  'POST /api/owner/super-admin': ({ body, user }) => {
+    requireRole(user, 'OWNER');
+    requireOwnerPassword(body, user);
+    const name = String(body.name ?? '').trim();
+    const phone = String(body.phone ?? '').trim();
+    const password = String(body.password ?? '');
+    const sellerLimit = Number(body.sellerLimit);
+    if (name.length < 2 || name.length > 60 || !/^\d{10,15}$/.test(phone)) return fail(400, 'Valid name and phone are required');
+    if (password.length < 8) return fail(400, 'Temporary password must contain at least 8 characters');
+    if (!Number.isInteger(sellerLimit) || sellerLimit < 1 || sellerLimit > 100000) return fail(400, 'Seller limit must be between 1 and 100000');
+    if (store.users.some((item) => item.phone === phone)) return fail(409, 'Phone number already exists');
+    const record = createRecord('users', { parentId: user.id, role: 'SUPER_ADMIN', superAdminCode: nextSuperAdminCode(), name, phone, passwordHash: hashPassword(password), sellerLimit, isActive: true });
+    audit(user.id, 'SUPER_ADMIN_CREATED', 'user', record.id, { superAdminCode: record.superAdminCode, sellerLimit });
+    return created(publicUser(record));
   },
   'PUT /api/owner/seller-limit': ({ body, user }) => {
     requireRole(user, 'OWNER');
-    const account = store.users.find((item) => item.id === user.id);
-    if (!verifyPassword(String(body.ownerPassword ?? ''), account.passwordHash)) return fail(403, 'Owner password is incorrect');
-    const maxSellers = Number(body.maxSellers);
-    const currentSellers = store.users.filter((item) => item.role === 'SELLER' && item.isActive).length;
-    if (!Number.isInteger(maxSellers) || maxSellers < currentSellers || maxSellers > 100000) return fail(400, `Seller limit must be between ${currentSellers} and 100000`);
-    store.settings.maxSellers = maxSellers;
-    audit(user.id, 'SELLER_LIMIT_UPDATED', 'settings', null, { maxSellers });
-    return ok({ maxSellers, currentSellers, remaining: maxSellers - currentSellers });
+    requireOwnerPassword(body, user);
+    const superAdmin = store.users.find((item) => item.id === body.superAdminId && item.role === 'SUPER_ADMIN');
+    if (!superAdmin) return fail(404, 'Super Admin not found');
+    const sellerLimit = Number(body.sellerLimit);
+    const currentSellers = activeSellerCount(superAdmin.id);
+    if (!Number.isInteger(sellerLimit) || sellerLimit < currentSellers || sellerLimit > 100000) return fail(400, `Seller limit must be between ${currentSellers} and 100000`);
+    superAdmin.sellerLimit = sellerLimit;
+    audit(user.id, 'SELLER_LIMIT_UPDATED', 'user', superAdmin.id, { superAdminCode: superAdmin.superAdminCode, sellerLimit });
+    return ok({ superAdminId: superAdmin.id, superAdminCode: superAdmin.superAdminCode, sellerLimit, currentSellers, remaining: sellerLimit - currentSellers });
   },
   'GET /api/settings': ({ user }) => ok(user.role === 'SUPER_ADMIN' ? store.settings : { schemes: visibleSchemes(user), schemeRates: assignedSchemeRates(user), pricing: visiblePricing(user.role) }),
   'PUT /api/settings': ({ body, user }) => {
@@ -183,8 +202,9 @@ const routes = {
     requireActionPassword(body, user, 'management');
     if (!body.name?.trim() || !/^\d{10,15}$/.test(String(body.phone))) return fail(400, 'Valid name and phone are required');
     if (store.users.some((item) => item.phone === String(body.phone))) return fail(409, 'Phone number already exists');
-    const currentSellers = store.users.filter((item) => item.role === 'SELLER' && item.isActive).length;
-    if (currentSellers >= Number(store.settings.maxSellers ?? 2000)) return fail(409, `Seller limit reached (${store.settings.maxSellers}). Contact System Owner.`);
+    const currentSellers = activeSellerCount(user.id);
+    const sellerLimit = Number(store.users.find((item) => item.id === user.id)?.sellerLimit ?? store.settings.maxSellers ?? 2000);
+    if (currentSellers >= sellerLimit) return fail(409, `Seller limit reached for Super Admin ${user.superAdminCode ?? user.id} (${sellerLimit}). Contact System Owner.`);
     let schemeRates;
     let distributorAccess;
     distributorAccess = validateDistributorLotAssignment(body.lotCodeId, body.catalogSchemeRates);
@@ -853,7 +873,7 @@ function buildDashboard(user) {
     recentTickets: tickets.slice(-100).reverse(),
     bonusRules: user.role === 'SUPER_ADMIN' ? store.bonusRules.filter((item) => item.ownerId === user.id) : undefined,
     directSellerPerformance: user.role === 'SUPER_ADMIN' ? buildDirectSellerPerformance() : undefined,
-    sellerCapacity: user.role === 'SUPER_ADMIN' ? { maximum: Number(store.settings.maxSellers ?? 2000), current: store.users.filter((item) => item.role === 'SELLER' && item.isActive).length, remaining: Math.max(0, Number(store.settings.maxSellers ?? 2000) - store.users.filter((item) => item.role === 'SELLER' && item.isActive).length) } : undefined,
+    sellerCapacity: user.role === 'SUPER_ADMIN' ? (() => { const maximum = Number(store.users.find((item) => item.id === user.id)?.sellerLimit ?? store.settings.maxSellers ?? 2000); const current = activeSellerCount(user.id); return { superAdminCode: store.users.find((item) => item.id === user.id)?.superAdminCode, maximum, current, remaining: Math.max(0, maximum - current) }; })() : undefined,
     actionSecurity: user.role === 'SUPER_ADMIN' ? { resultPasswordConfigured: Boolean(store.security.resultPasswordHash), managementPasswordConfigured: Boolean(store.security.managementPasswordHash) } : undefined,
     license: licenseStatus(),
     weeklyAccounts: user.role === 'SUPER_ADMIN' ? buildWeeklyAccounts() : undefined
@@ -1019,6 +1039,20 @@ function visiblePricing(role) {
   return { sellerRate: p.sellerRate, customerRate: p.customerRate };
 }
 function requireRole(user, role) { if (user.role !== role) { const error = new Error('Permission denied'); error.status = 403; throw error; } }
+function activeSellerCount(superAdminId) { return store.users.filter((item) => item.role === 'SELLER' && item.parentId === superAdminId && item.isActive).length; }
+function requireOwnerPassword(body, user) {
+  const account = store.users.find((item) => item.id === user.id && item.role === 'OWNER');
+  if (!account || !verifyPassword(String(body.ownerPassword ?? ''), account.passwordHash)) { const error = new Error('Owner password is incorrect'); error.status = 403; throw error; }
+}
+function nextSuperAdminCode() {
+  const date = new Date();
+  const year = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Kolkata', year: '2-digit' }).format(date);
+  const month = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Kolkata', month: '2-digit' }).format(date);
+  const prefix = `${year}${month}`;
+  const maximum = store.users.filter((item) => item.role === 'SUPER_ADMIN' && String(item.superAdminCode ?? '').startsWith(prefix)).reduce((max, item) => Math.max(max, Number(String(item.superAdminCode).slice(4)) || 0), 0);
+  if (maximum >= 9999) { const error = new Error('This month Super Admin ID sequence is full'); error.status = 409; throw error; }
+  return `${prefix}${String(maximum + 1).padStart(4, '0')}`;
+}
 function requireActionPassword(body, user, type) {
   const account = store.users.find((item) => item.id === user.id);
   const stored = type === 'result' ? store.security.resultPasswordHash : store.security.managementPasswordHash;

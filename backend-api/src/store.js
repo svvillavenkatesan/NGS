@@ -89,6 +89,21 @@ store.users = store.users.filter((item) => !['SUB_DISTRIBUTOR', 'DISTRIBUTOR'].i
 store.settings.subDistributorEnabled = false;
 store.settings.maxSellers ??= 2000;
 if (!store.users.some((item) => item.role === 'OWNER')) store.users.unshift(user('owner-1', null, 'OWNER', 'System Owner', '9000000000', 'Owner@123'));
+const usedSuperAdminCodes = new Set(store.users.filter((item) => item.role === 'SUPER_ADMIN' && /^\d{8}$/.test(String(item.superAdminCode ?? ''))).map((item) => item.superAdminCode));
+for (const account of store.users.filter((item) => item.role === 'SUPER_ADMIN')) {
+  account.parentId ??= 'owner-1';
+  account.sellerLimit ??= Number(store.settings.maxSellers ?? 2000);
+  if (!/^\d{8}$/.test(String(account.superAdminCode ?? ''))) {
+    const date = new Date(account.createdAt ?? Date.now());
+    const year = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Kolkata', year: '2-digit' }).format(date);
+    const month = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Kolkata', month: '2-digit' }).format(date);
+    const prefix = `${year}${month}`;
+    let sequence = 1;
+    while (usedSuperAdminCodes.has(`${prefix}${String(sequence).padStart(4, '0')}`)) sequence += 1;
+    account.superAdminCode = `${prefix}${String(sequence).padStart(4, '0')}`;
+    usedSuperAdminCodes.add(account.superAdminCode);
+  }
+}
 store.saleReports ??= [];
 store.reportCorrections ??= [];
 store.bills ??= [];
