@@ -162,6 +162,33 @@ class _Entry extends State<Entry> {
     }).firstOrNull?['id'];
   }
 
+  Map<String, dynamic>? nextOpenBoard() {
+    for (final item in boards.cast<Map<String, dynamic>>()) {
+      if (nextShowId(item) != null) return item;
+    }
+    return null;
+  }
+
+  void selectNextOpenLotCode() {
+    if (cart.isNotEmpty) return;
+    final currentOpen = board != null && nextShowId(board) != null;
+    if (currentOpen) {
+      final next = nextShowId(board);
+      if (showId != next) showId = next;
+      return;
+    }
+    final nextBoard = nextOpenBoard();
+    if (nextBoard == null || nextBoard['id'] == boardId) return;
+    boardId = nextBoard['id'];
+    showId = nextShowId(nextBoard);
+    schemeId = available.firstOrNull?['id'];
+    number.clear();
+    qty.text = '1';
+    box = false;
+    note = '${nextBoard['code'] == 'DR' || nextBoard['id'] == 'dear' ? 'DR' : nextBoard['code']} selected automatically';
+    focusNumberAndKeyboard();
+  }
+
   int _endMinutes(Map<String, dynamic> show) {
     final value = show['effectiveEndTime'] ?? show['endTime'];
     final parts = value.split(':').map(int.parse).toList();
@@ -203,7 +230,12 @@ class _Entry extends State<Entry> {
     super.initState();
     load();
     timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => now = DateTime.now());
+      if (mounted) {
+        setState(() {
+          now = DateTime.now();
+          selectNextOpenLotCode();
+        });
+      }
     });
   }
 
@@ -231,7 +263,7 @@ class _Entry extends State<Entry> {
         previousBills
           ..clear()
           ..addAll((recent as List).cast<Map<String, dynamic>>());
-        final firstBoard = boards.firstOrNull as Map<String, dynamic>?;
+        final firstBoard = nextOpenBoard() ?? boards.firstOrNull as Map<String, dynamic>?;
         boardId = firstBoard?['id'];
         showId = nextShowId(firstBoard);
         schemeId = available.firstOrNull?['id'];
