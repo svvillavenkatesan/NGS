@@ -13,6 +13,8 @@ foreach ($name in @('application-data.json', 'license-state.json')) {
   if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination (Join-Path $stage $name) }
 }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'database\schema.sql') -Destination (Join-Path $stage 'schema.sql')
+$manifest = Get-ChildItem -LiteralPath $stage -File | ForEach-Object { "$(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256 | Select-Object -ExpandProperty Hash)  $($_.Name)" }
+$manifest | Set-Content -LiteralPath (Join-Path $stage 'SHA256SUMS.txt') -Encoding utf8
 $archive = "$stage.zip"
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $archive -Force -ErrorAction Stop
 if (-not (Test-Path -LiteralPath $archive)) { throw 'Backup archive was not created.' }

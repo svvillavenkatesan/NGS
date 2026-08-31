@@ -19,6 +19,9 @@ The Seller Entry client is Android-only in production. Super Admin and Distribut
 3. Run `flutter pub get`.
 4. Emulator: `flutter run --dart-define=API_BASE_URL=http://10.0.2.2:4000`.
 5. Physical phone: use the server's reachable HTTPS URL.
-6. Release: `flutter build apk --release --dart-define=API_BASE_URL=https://your-server.example`.
+6. Copy `android/key.properties.example` to `android/key.properties`, create a private release keystore, and replace all example values. Never commit either file.
+7. Release: `flutter build apk --release --dart-define=API_BASE_URL=https://your-server.example`.
+
+Release builds require both an HTTPS API address and a private signing key. Debug signing and clear-text HTTP are rejected for the production APK.
 
 Production must use HTTPS. Do not ship a release APK pointing to localhost or a private development address.

@@ -12,6 +12,8 @@
 - Caddy HTTPS reverse proxy, automatic certificate renewal மற்றும் production environment template.
 - Production தொடங்கும்போது demo Owner/Admin password இருந்தால் server இயங்காமல் தடுக்கும் பாதுகாப்பு.
 - JSON/PostgreSQL backup மற்றும் restore scripts repository-ல் உள்ளன.
+- JSON backup ஒவ்வொன்றிலும் SHA-256 checksum manifest உருவாகிறது; `scripts/verify-backup.ps1` மூலம் restore-க்கு முன் சரிபார்க்கலாம்.
+- Android release APK-க்கு HTTPS server URL மற்றும் தனிப்பட்ட signing key கட்டாயமாக்கப்பட்டுள்ளது.
 - 20 automated tests வெற்றிகரமாக இயங்குகின்றன.
 
 ## Production தொடங்குவதற்கு முன் கட்டாயமாக செய்ய வேண்டியது

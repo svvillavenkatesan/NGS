@@ -1,15 +1,21 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
-void main() => runApp(const App());
 const api = String.fromEnvironment('API_BASE_URL',
     defaultValue: 'http://10.0.2.2:4000');
+void main() {
+  if (kReleaseMode && !api.startsWith('https://')) {
+    throw StateError('Release APK requires an HTTPS API_BASE_URL.');
+  }
+  runApp(const App());
+}
 const client = 'number-game-seller-android/1.0.0';
 Map<String, String> headers([String? token]) => {
       'content-type': 'application/json',
