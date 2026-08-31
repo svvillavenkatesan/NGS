@@ -1,4 +1,4 @@
-package com.example.number_game_seller
+package com.svv.ngs.seller
 
 import io.flutter.embedding.android.FlutterActivity
 
