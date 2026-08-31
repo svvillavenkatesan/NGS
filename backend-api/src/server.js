@@ -49,6 +49,23 @@ const routes = {
     return ok({ changed: true, userId: account.id, loginRequired: true });
   },
   'GET /api/license/status': () => ok(licenseStatus()),
+  'GET /api/owner/control': ({ user }) => {
+    requireRole(user, 'OWNER');
+    const currentSellers = store.users.filter((item) => item.role === 'SELLER' && item.isActive).length;
+    const maxSellers = Number(store.settings.maxSellers ?? 2000);
+    return ok({ maxSellers, currentSellers, remaining: Math.max(0, maxSellers - currentSellers), superAdmins: store.users.filter((item) => item.role === 'SUPER_ADMIN').map(publicUser) });
+  },
+  'PUT /api/owner/seller-limit': ({ body, user }) => {
+    requireRole(user, 'OWNER');
+    const account = store.users.find((item) => item.id === user.id);
+    if (!verifyPassword(String(body.ownerPassword ?? ''), account.passwordHash)) return fail(403, 'Owner password is incorrect');
+    const maxSellers = Number(body.maxSellers);
+    const currentSellers = store.users.filter((item) => item.role === 'SELLER' && item.isActive).length;
+    if (!Number.isInteger(maxSellers) || maxSellers < currentSellers || maxSellers > 100000) return fail(400, `Seller limit must be between ${currentSellers} and 100000`);
+    store.settings.maxSellers = maxSellers;
+    audit(user.id, 'SELLER_LIMIT_UPDATED', 'settings', null, { maxSellers });
+    return ok({ maxSellers, currentSellers, remaining: maxSellers - currentSellers });
+  },
   'GET /api/settings': ({ user }) => ok(user.role === 'SUPER_ADMIN' ? store.settings : { schemes: visibleSchemes(user), schemeRates: assignedSchemeRates(user), pricing: visiblePricing(user.role) }),
   'PUT /api/settings': ({ body, user }) => {
     requireRole(user, 'SUPER_ADMIN');
@@ -166,6 +183,8 @@ const routes = {
     requireActionPassword(body, user, 'management');
     if (!body.name?.trim() || !/^\d{10,15}$/.test(String(body.phone))) return fail(400, 'Valid name and phone are required');
     if (store.users.some((item) => item.phone === String(body.phone))) return fail(409, 'Phone number already exists');
+    const currentSellers = store.users.filter((item) => item.role === 'SELLER' && item.isActive).length;
+    if (currentSellers >= Number(store.settings.maxSellers ?? 2000)) return fail(409, `Seller limit reached (${store.settings.maxSellers}). Contact System Owner.`);
     let schemeRates;
     let distributorAccess;
     distributorAccess = validateDistributorLotAssignment(body.lotCodeId, body.catalogSchemeRates);
@@ -834,6 +853,7 @@ function buildDashboard(user) {
     recentTickets: tickets.slice(-100).reverse(),
     bonusRules: user.role === 'SUPER_ADMIN' ? store.bonusRules.filter((item) => item.ownerId === user.id) : undefined,
     directSellerPerformance: user.role === 'SUPER_ADMIN' ? buildDirectSellerPerformance() : undefined,
+    sellerCapacity: user.role === 'SUPER_ADMIN' ? { maximum: Number(store.settings.maxSellers ?? 2000), current: store.users.filter((item) => item.role === 'SELLER' && item.isActive).length, remaining: Math.max(0, Number(store.settings.maxSellers ?? 2000) - store.users.filter((item) => item.role === 'SELLER' && item.isActive).length) } : undefined,
     actionSecurity: user.role === 'SUPER_ADMIN' ? { resultPasswordConfigured: Boolean(store.security.resultPasswordHash), managementPasswordConfigured: Boolean(store.security.managementPasswordHash) } : undefined,
     license: licenseStatus(),
     weeklyAccounts: user.role === 'SUPER_ADMIN' ? buildWeeklyAccounts() : undefined
@@ -1044,7 +1064,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 async function serveStatic(pathname, res) {
-  const pages = { '/': 'admin-portal/index.html', '/admin': 'admin-portal/index.html', '/seller': 'seller-portal/index.html' };
+  const pages = { '/': 'admin-portal/index.html', '/owner': 'owner-portal/index.html', '/admin': 'admin-portal/index.html', '/seller': 'seller-portal/index.html' };
   const relative = pages[pathname] ?? pathname.replace(/^\//, '');
   if (relative.includes('..') || !['.html', '.css', '.js'].includes(extname(relative))) return send(res, 404, { error: 'Not found' });
   try {

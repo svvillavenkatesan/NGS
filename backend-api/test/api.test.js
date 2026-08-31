@@ -20,6 +20,7 @@ test('NGS direct Seller workflow', async (context) => {
 
   const admin = await login('9000000001', 'Admin@123');
   const seller = await login('9000000004', 'Seller@123');
+  const owner = await login('9000000000', 'Owner@123');
 
   const retiredDistributor = await json('/api/users', admin, { method: 'POST', body: JSON.stringify({ role: 'DISTRIBUTOR', name: 'Blocked Distributor', phone: '9111111111', password: 'Welcome@123', actionPassword: 'Admin@123' }) });
   assert.equal(retiredDistributor.response.status, 403);
@@ -30,6 +31,15 @@ test('NGS direct Seller workflow', async (context) => {
   assert.equal(directSeller.data.role, 'SELLER');
   assert.deepEqual(directSeller.data.lotCodeIds, ['kerala']);
   assert.equal(directSeller.data.commissionPercentage, 20);
+
+  const ownerControl = await json('/api/owner/control', owner);
+  assert.equal(ownerControl.response.status, 200);
+  assert.equal(ownerControl.data.currentSellers, 2);
+  const sellerLimit = await json('/api/owner/seller-limit', owner, { method: 'PUT', body: JSON.stringify({ maxSellers: 2, ownerPassword: 'Owner@123' }) });
+  assert.equal(sellerLimit.response.status, 200);
+  assert.equal(sellerLimit.data.remaining, 0);
+  const blockedByLimit = await json('/api/users', admin, { method: 'POST', body: JSON.stringify({ role: 'SELLER', name: 'Over Limit', phone: '9666666666', password: 'Seller@999', lotCodeId: 'kerala', catalogSchemeRates: { 'scheme-a': { enabled: true, rate: 10.6 } }, commissionPercentage: 0, actionPassword: 'Admin@123' }) });
+  assert.equal(blockedByLimit.response.status, 409);
 
   const directToken = await login('9555555555', 'Seller@789');
   const directDashboard = await json('/api/dashboard', directToken);

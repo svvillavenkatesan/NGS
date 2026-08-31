@@ -70,7 +70,7 @@ async function renderDashboard() {
       ${reportsWorkspace(reports)}
       ${weeklyAccountsPanel(dashboard.weeklyAccounts)}
       <section class="workspace hidden" data-panel="results">${dailyResultsPanel(dashboard.boards, dashboard.recentDraws ?? [], true)}${actionPanel(dashboard)}${profitTargetPanel(dashboard)}${candidatePanel(candidateData)}</section>
-      ${directSellerWorkspace(dashboard.boards, dashboard.schemeCatalog, users)}
+      ${directSellerWorkspace(dashboard.boards, dashboard.schemeCatalog, users, dashboard.sellerCapacity)}
       ${schemeCatalogPanel(dashboard.schemeCatalog)}
       ${lotCodePanel(dashboard.boards, dashboard.schemeCatalog)}
       ${securityPanel(dashboard.actionSecurity)}
@@ -190,9 +190,9 @@ function distributorPanel(lotCodes = [], catalog = [], users = [], bonusRules = 
     </form></article>${distributorBonusPanel(users, bonusRules)}${usersPanel(users.filter((item) => item.role === 'DISTRIBUTOR'))}
   </section>`;
 }
-function directSellerWorkspace(lotCodes = [], catalog = [], users = []) {
+function directSellerWorkspace(lotCodes = [], catalog = [], users = [], capacity = {}) {
   const directSellers = users.filter((item) => item.role === 'SELLER' && item.parentId === 'admin-1');
-  return `<section class="workspace hidden" data-panel="direct-sellers">${directSellerPanel(lotCodes, catalog)}${usersPanel(directSellers)}</section>`;
+  return `<section class="workspace hidden" data-panel="direct-sellers"><article class="card wide"><h2>Seller Capacity</h2><div class="metrics"><div><span>Maximum</span><strong>${Number(capacity.maximum ?? 0)}</strong></div><div><span>Active Sellers</span><strong>${Number(capacity.current ?? 0)}</strong></div><div><span>Remaining</span><strong>${Number(capacity.remaining ?? 0)}</strong></div></div><p class="muted">Maximum Seller limit-ஐ System Owner Panel-ல் மட்டுமே மாற்ற முடியும்.</p></article>${directSellerPanel(lotCodes, catalog)}${usersPanel(directSellers)}</section>`;
 }
 function directSellerPanel(lotCodes = [], catalog = []) {
   return `<article class="card wide"><p class="muted">DIRECT SELLER</p><h2>Add Seller under Super Admin</h2><p class="muted">Lot Code தேர்வு செய்து, அந்த Direct Seller பயன்படுத்த வேண்டிய 3D/4D Schemes மட்டும் tick செய்யவும். Common schemes தானாக வழங்கப்படும்.</p><form id="direct-seller-form" class="catalog-form"><input type="hidden" name="role" value="SELLER"><label>Seller name<input name="name" required></label><label>Mobile number<input name="phone" inputmode="numeric" pattern="[0-9]{10,15}" required></label><label>Temporary password<input name="password" type="password" minlength="8" autocomplete="new-password" required></label><label>Lot Code<select name="lotCodeId" id="direct-seller-lot-code">${lotCodes.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.code)} - ${escapeHtml(item.name)}</option>`).join('')}</select></label><fieldset class="scheme-rates"><legend>Common schemes</legend><div>${catalog.filter((scheme) => scheme.universal).map((scheme) => `<span class="rate-tag">${escapeHtml(scheme.name)}</span>`).join(' ')}</div></fieldset><fieldset class="scheme-rates"><legend>Select 3D / 4D Schemes</legend><div class="scheme-toolbar"><p class="muted">தேர்ந்தெடுத்த Lot Code-க்கு அனுமதிக்கப்பட்ட schemes மட்டும் இங்கே வரும்.</p><button type="button" class="secondary" id="select-all-direct-seller-schemes">Select All</button></div><div class="subscheme-grid compact-scheme-grid">${catalog.filter((scheme) => !scheme.universal).map((scheme) => { const allowedLots = lotCodes.filter((lot) => lot.schemeIds?.includes(scheme.id)).map((lot) => lot.id).join(' '); return `<label class="check direct-seller-scheme" data-lot-ids="${escapeHtml(allowedLots)}"><input type="checkbox" name="direct_scheme_${scheme.id}" value="${escapeHtml(scheme.id)}"> ${escapeHtml(scheme.name)}</label>`; }).join('')}</div></fieldset><label>Commission %<input name="commissionPercentage" type="number" min="0" max="50" step="0.01" value="0" required></label><label>Management Password<input name="actionPassword" type="password" required></label><button>Create Direct Seller</button></form></article>`;

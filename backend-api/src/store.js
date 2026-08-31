@@ -14,6 +14,7 @@ export const store = {
   security: { resultPasswordHash: null, managementPasswordHash: null },
   settings: {
     subDistributorEnabled: false,
+    maxSellers: 2000,
     baseRate: 10,
     minimumProfit: { mode: 'PERCENTAGE', value: 20 },
     boards: [
@@ -49,6 +50,7 @@ export const store = {
     }
   },
   users: [
+    user('owner-1', null, 'OWNER', 'System Owner', '9000000000', 'Owner@123'),
     user('admin-1', null, 'SUPER_ADMIN', 'Super Admin', '9000000001', 'Admin@123'),
     { ...user('seller-1', 'admin-1', 'SELLER', 'Demo Seller', '9000000004', 'Seller@123'), commissionPercentage: 0, lotCodeIds: ['kerala'], lotCodeSchemeRates: { kerala: Object.fromEntries(initialSchemeIds.map((id) => [id, { enabled: true, rate: initialRateFor(id) }])) }, catalogSchemeRates: Object.fromEntries(initialSchemeIds.map((id) => [id, { enabled: true, rate: initialRateFor(id) }])) }
   ], contests: [], tickets: [], bills: [], draws: [], saleReports: [], reportCorrections: [], weeklyPayments: [], dailyExpenses: [], bonusRules: [], audit: []
@@ -85,6 +87,8 @@ for (const account of store.users.filter((item) => item.role === 'SELLER')) {
 }
 store.users = store.users.filter((item) => !['SUB_DISTRIBUTOR', 'DISTRIBUTOR'].includes(item.role));
 store.settings.subDistributorEnabled = false;
+store.settings.maxSellers ??= 2000;
+if (!store.users.some((item) => item.role === 'OWNER')) store.users.unshift(user('owner-1', null, 'OWNER', 'System Owner', '9000000000', 'Owner@123'));
 store.saleReports ??= [];
 store.reportCorrections ??= [];
 store.bills ??= [];
