@@ -9,6 +9,7 @@ async function request(path, options = {}) {
 }
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
+const money = (value) => `₹${Number(value ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
 function loginScreen(message = '') {
   app.innerHTML = `<section class="login card"><p class="muted">OWNER SECURITY</p><h1>System Owner Login</h1><form id="owner-login"><label>Phone<input name="phone" inputmode="numeric" required></label><label>Password<input name="password" type="password" required></label><button>Sign in</button><p class="error">${escapeHtml(message)}</p></form></section>`;
@@ -26,7 +27,8 @@ async function login(event) {
 
 function adminCard(item) {
   const created = new Date(item.createdAt).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' });
-  return `<article class="card wide"><h2>${escapeHtml(item.superAdminCode)} · ${escapeHtml(item.name)}</h2><p class="muted">Phone: ${escapeHtml(item.phone)} · Created: ${created} · ${item.isActive ? 'Active' : 'Disabled'}</p><p><strong>Sellers ${item.currentSellers} / ${item.sellerLimit}</strong> · Remaining ${item.remaining}</p><form class="admin-limit-form"><input name="superAdminId" type="hidden" value="${escapeHtml(item.id)}"><label>Seller Limit<input name="sellerLimit" type="number" min="${item.currentSellers}" max="100000" value="${item.sellerLimit}" required></label><label>Owner Password<input name="ownerPassword" type="password" required></label><button>Update Limit</button></form></article>`;
+  const rows = [['Today', item.financials.today], ['This Week', item.financials.week], ['This Month', item.financials.month]].map(([label, report]) => `<tr><td>${label}</td><td>${report.entries}</td><td>${report.quantity}</td><td>${money(report.sales)}</td><td>${money(report.prizes)}</td><td>${money(report.bonus)}</td><td class="${report.netProfit < 0 ? 'error' : ''}"><strong>${money(report.netProfit)}</strong></td></tr>`).join('');
+  return `<article class="card wide"><h2>${escapeHtml(item.superAdminCode)} · ${escapeHtml(item.name)}</h2><p class="muted">Phone: ${escapeHtml(item.phone)} · Created: ${created} · ${item.isActive ? 'Active' : 'Disabled'}</p><p><strong>Seller IDs: ${item.totalSellersCreated}</strong> · Active ${item.currentSellers} · Limit ${item.sellerLimit} · Remaining ${item.remaining}</p><div class="table-wrap"><table><thead><tr><th>Period</th><th>Entries</th><th>Qty</th><th>Sales</th><th>Prize</th><th>Bonus</th><th>Profit / Loss</th></tr></thead><tbody>${rows}</tbody></table></div><p class="muted">Today ${item.financials.periods.today} · Week ${item.financials.periods.weekStart} to ${item.financials.periods.weekEnd} · Month ${item.financials.periods.month}</p><form class="admin-limit-form"><input name="superAdminId" type="hidden" value="${escapeHtml(item.id)}"><label>Seller Limit<input name="sellerLimit" type="number" min="${item.currentSellers}" max="100000" value="${item.sellerLimit}" required></label><label>Owner Password<input name="ownerPassword" type="password" required></label><button>Update Limit</button></form></article>`;
 }
 
 async function render(message = '') {

@@ -53,8 +53,9 @@ const routes = {
     requireRole(user, 'OWNER');
     const superAdmins = store.users.filter((item) => item.role === 'SUPER_ADMIN').map((item) => {
       const currentSellers = activeSellerCount(item.id);
+      const totalSellersCreated = store.users.filter((account) => account.role === 'SELLER' && account.parentId === item.id).length;
       const sellerLimit = Number(item.sellerLimit ?? store.settings.maxSellers ?? 2000);
-      return { ...publicUser(item), currentSellers, sellerLimit, remaining: Math.max(0, sellerLimit - currentSellers) };
+      return { ...publicUser(item), currentSellers, totalSellersCreated, sellerLimit, remaining: Math.max(0, sellerLimit - currentSellers), financials: ownerFinancialSummary(item.id) };
     });
     return ok({ totalSuperAdmins: superAdmins.length, currentSellers: superAdmins.reduce((sum, item) => sum + item.currentSellers, 0), totalCapacity: superAdmins.reduce((sum, item) => sum + item.sellerLimit, 0), superAdmins });
   },
@@ -1040,6 +1041,32 @@ function visiblePricing(role) {
 }
 function requireRole(user, role) { if (user.role !== role) { const error = new Error('Permission denied'); error.status = 403; throw error; } }
 function activeSellerCount(superAdminId) { return store.users.filter((item) => item.role === 'SELLER' && item.parentId === superAdminId && item.isActive).length; }
+function ownerFinancialSummary(superAdminId) {
+  const sellerIds = new Set(store.users.filter((item) => item.role === 'SELLER' && item.parentId === superAdminId).map((item) => item.id));
+  const today = localDateKey(new Date());
+  const week = weekRange(today);
+  const month = today.slice(0, 7);
+  const summarize = (tickets) => {
+    const sales = tickets.reduce((sum, item) => sum + Number(item.total ?? 0), 0);
+    const prizes = tickets.reduce((sum, item) => sum + Number(item.prize ?? 0), 0);
+    const bonus = tickets.reduce((sum, item) => {
+      const seller = store.users.find((account) => account.id === item.sellerId);
+      const ratedAmount = Number(item.rateSnapshot?.distributorRate ?? item.unitPrice ?? 0) * Number(item.quantity ?? 0);
+      const margin = Math.max(0, Number(item.total ?? 0) - ratedAmount);
+      const percentage = Number(item.rateSnapshot?.sellerCommissionPercentage ?? seller?.commissionPercentage ?? 0);
+      return sum + Math.round(margin * percentage) / 100;
+    }, 0);
+    return { entries: tickets.length, quantity: tickets.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0), sales, prizes, bonus, netProfit: Math.round((sales - prizes - bonus) * 100) / 100 };
+  };
+  const tickets = store.tickets.filter((item) => sellerIds.has(item.sellerId));
+  const dateOf = (item) => item.businessDate ?? localDateKey(item.createdAt);
+  return {
+    today: summarize(tickets.filter((item) => dateOf(item) === today)),
+    week: summarize(tickets.filter((item) => dateOf(item) >= week.weekStart && dateOf(item) <= week.weekEnd)),
+    month: summarize(tickets.filter((item) => dateOf(item).startsWith(month))),
+    periods: { today, weekStart: week.weekStart, weekEnd: week.weekEnd, month }
+  };
+}
 function requireOwnerPassword(body, user) {
   const account = store.users.find((item) => item.id === user.id && item.role === 'OWNER');
   if (!account || !verifyPassword(String(body.ownerPassword ?? ''), account.passwordHash)) { const error = new Error('Owner password is incorrect'); error.status = 403; throw error; }

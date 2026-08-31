@@ -35,7 +35,11 @@ test('NGS direct Seller workflow', async (context) => {
   const ownerControl = await json('/api/owner/control', owner);
   assert.equal(ownerControl.response.status, 200);
   assert.equal(ownerControl.data.currentSellers, 2);
-  assert.match(ownerControl.data.superAdmins.find((item) => item.id === 'admin-1').superAdminCode, /^\d{8}$/);
+  const primaryAdminReport = ownerControl.data.superAdmins.find((item) => item.id === 'admin-1');
+  assert.match(primaryAdminReport.superAdminCode, /^\d{8}$/);
+  assert.equal(primaryAdminReport.totalSellersCreated, 2);
+  assert.equal(typeof primaryAdminReport.financials.today.netProfit, 'number');
+  assert.deepEqual(Object.keys(primaryAdminReport.financials).sort(), ['month', 'periods', 'today', 'week']);
   const newAdminOne = await json('/api/owner/super-admin', owner, { method: 'POST', body: JSON.stringify({ name: 'Branch Admin One', phone: '9777777771', password: 'Branch@123', sellerLimit: 1, ownerPassword: 'Owner@123' }) });
   const newAdminTwo = await json('/api/owner/super-admin', owner, { method: 'POST', body: JSON.stringify({ name: 'Branch Admin Two', phone: '9777777772', password: 'Branch@124', sellerLimit: 5, ownerPassword: 'Owner@123' }) });
   assert.equal(newAdminOne.response.status, 201);
