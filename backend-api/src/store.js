@@ -50,14 +50,7 @@ export const store = {
   },
   users: [
     user('admin-1', null, 'SUPER_ADMIN', 'Super Admin', '9000000001', 'Admin@123'),
-    { ...user('dist-1', 'admin-1', 'DISTRIBUTOR', 'Demo Distributor', '9000000002', '1111122222', {
-      FOUR_EXACT: { enabled: true, rate: 12 }, FOUR_LAST3: { enabled: true, rate: 12 },
-      FOUR_LAST2: { enabled: true, rate: 12 }, FOUR_LAST1: { enabled: true, rate: 12 },
-      THREE_EXACT: { enabled: true, rate: 12 }, THREE_LAST2: { enabled: true, rate: 12 },
-      THREE_LAST1: { enabled: true, rate: 12 }, TWO_STANDARD: { enabled: true, rate: 12 },
-      ONE_STANDARD: { enabled: true, rate: 12 }
-    }), lotCodeIds: ['kerala'], lotCodeSchemeRates: { kerala: Object.fromEntries(initialSchemeIds.map((id) => [id, { enabled: true, rate: initialRateFor(id) }])) }, catalogSchemeRates: Object.fromEntries(initialSchemeIds.map((id) => [id, { enabled: true, rate: initialRateFor(id) }])) },
-    { ...user('seller-1', 'dist-1', 'SELLER', 'Demo Seller', '9000000004', 'Seller@123'), commissionPercentage: 0 }
+    { ...user('seller-1', 'admin-1', 'SELLER', 'Demo Seller', '9000000004', 'Seller@123'), commissionPercentage: 0, lotCodeIds: ['kerala'], lotCodeSchemeRates: { kerala: Object.fromEntries(initialSchemeIds.map((id) => [id, { enabled: true, rate: initialRateFor(id) }])) }, catalogSchemeRates: Object.fromEntries(initialSchemeIds.map((id) => [id, { enabled: true, rate: initialRateFor(id) }])) }
   ], contests: [], tickets: [], bills: [], draws: [], saleReports: [], reportCorrections: [], weeklyPayments: [], dailyExpenses: [], bonusRules: [], audit: []
 };
 
@@ -73,13 +66,24 @@ if (process.env.NODE_ENV !== 'test' && existsSync(dataFile)) {
   }
 }
 
-// Migrate the retired Sub-Distributor tier into direct Distributor -> Seller links.
+// NGS is direct-only: preserve Seller access while retiring legacy tiers.
 const retiredSubDistributors = new Map(store.users.filter((item) => item.role === 'SUB_DISTRIBUTOR').map((item) => [item.id, item.parentId]));
 for (const account of store.users) {
   if (account.role === 'SELLER' && retiredSubDistributors.has(account.parentId)) account.parentId = retiredSubDistributors.get(account.parentId);
   if (account.role === 'SELLER') account.commissionPercentage ??= 0;
 }
-store.users = store.users.filter((item) => item.role !== 'SUB_DISTRIBUTOR');
+const legacyDistributors = new Map(store.users.filter((item) => item.role === 'DISTRIBUTOR').map((item) => [item.id, item]));
+for (const account of store.users.filter((item) => item.role === 'SELLER')) {
+  const distributor = legacyDistributors.get(account.parentId);
+  if (!distributor) continue;
+  account.parentId = 'admin-1';
+  account.lotCodeIds ??= [...(distributor.lotCodeIds ?? [])];
+  account.lotCodeSchemeRates ??= structuredClone(distributor.lotCodeSchemeRates ?? {});
+  account.catalogSchemeRates ??= structuredClone(distributor.catalogSchemeRates ?? {});
+  account.schemeRates ??= structuredClone(distributor.schemeRates ?? {});
+  account.lotCodeGraceMinutes ??= structuredClone(distributor.lotCodeGraceMinutes ?? {});
+}
+store.users = store.users.filter((item) => !['SUB_DISTRIBUTOR', 'DISTRIBUTOR'].includes(item.role));
 store.settings.subDistributorEnabled = false;
 store.saleReports ??= [];
 store.reportCorrections ??= [];

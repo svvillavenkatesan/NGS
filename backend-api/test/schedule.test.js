@@ -28,7 +28,7 @@ test('Dear defaults to the next closing show and supports explicit show selectio
   assert.equal(findOpenSchedule(dear, 1199), null);
 });
 
-test('Distributor grace extends only the selected show cutoff', () => {
+test('Direct Seller grace extends only the selected show cutoff', () => {
   assert.equal(findOpenSchedule(dear, 1200), null);
   assert.equal(findOpenSchedule(dear, 1200, { show3: 2 })?.id, 'show3');
   assert.equal(findOpenSchedule(dear, 1201, { show3: 2 }), null);

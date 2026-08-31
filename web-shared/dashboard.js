@@ -57,7 +57,7 @@ async function renderDashboard() {
   const roleLabel = expectedRole.replaceAll('_', ' ');
   document.querySelector('main').innerHTML = `
     ${expectedRole === 'DISTRIBUTOR' ? `<div class="title-row"><div><p class="muted">${roleLabel} CONTROL CENTER</p><h1>வணக்கம், ${escapeHtml(currentUser.name)}</h1></div><button class="secondary" id="logout">Sign out</button></div>` : ''}
-    ${expectedRole === 'SUPER_ADMIN' ? '<div class="compact-panel-title"><strong>SUPER ADMIN PANEL</strong></div><nav class="panel-tabs"><button type="button" class="active" data-panel-tab="overview">Dashboard</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="weekly-accounts">Weekly Accounts</button><button type="button" data-panel-tab="results">Results</button><button type="button" data-panel-tab="distributors">Distributors</button><button type="button" data-panel-tab="direct-sellers">Direct Sellers</button><button type="button" data-panel-tab="schemes">Schemes</button><button type="button" data-panel-tab="lot-codes">Lot Codes</button><button type="button" data-panel-tab="security">Security</button><button type="button" data-panel-tab="license">License</button><button type="button" class="seller-exit" id="logout">Exit</button></nav>' : ''}
+    ${expectedRole === 'SUPER_ADMIN' ? '<div class="compact-panel-title"><strong>NGS · SUPER ADMIN PANEL</strong></div><nav class="panel-tabs"><button type="button" class="active" data-panel-tab="overview">Dashboard</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="weekly-accounts">Weekly Accounts</button><button type="button" data-panel-tab="results">Results</button><button type="button" data-panel-tab="direct-sellers">Direct Sellers</button><button type="button" data-panel-tab="schemes">Schemes</button><button type="button" data-panel-tab="lot-codes">Lot Codes</button><button type="button" data-panel-tab="security">Security</button><button type="button" data-panel-tab="license">License</button><button type="button" class="seller-exit" id="logout">Exit</button></nav>' : ''}
     ${expectedRole === 'DISTRIBUTOR' ? '<nav class="panel-tabs"><button type="button" class="active" data-panel-tab="overview">Overview</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="accounts">Weekly Accounts</button><button type="button" data-panel-tab="sales">Sales</button><button type="button" data-panel-tab="network">Network</button><button type="button" data-panel-tab="schemes">Schemes</button><button type="button" data-panel-tab="results">Results</button></nav>' : ''}
     ${expectedRole === 'SELLER' ? '<nav class="panel-tabs seller-tabs"><button type="button" class="active" data-panel-tab="entry">Entry</button><button type="button" data-panel-tab="results">Results</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="sales">Sales</button><button type="button" data-panel-tab="account">My Account</button><button type="button" class="seller-exit" id="logout">Exit</button></nav>' : ''}
     ${expectedRole !== 'SELLER' ? `<section class="grid">
@@ -66,11 +66,10 @@ async function renderDashboard() {
       <article class="card"><span class="muted">${expectedRole === 'DISTRIBUTOR' ? 'Weekly margin' : 'Net profit'}</span><strong>${money(expectedRole === 'DISTRIBUTOR' ? dashboard.distributorAccounts?.margin : dashboard.bonus.netProfit)}</strong></article><article class="card"><span class="muted">Tickets / Network</span><strong>${dashboard.quantity} / ${dashboard.users}</strong></article>
     </section>` : ''}
     ${expectedRole === 'SUPER_ADMIN' ? `
-      <section class="workspace" data-panel="overview">${performancePanel(dashboard.distributorPerformance, dashboard.latestDraw)}${ticketsPanel(dashboard.recentTickets)}</section>
+      <section class="workspace" data-panel="overview">${performancePanel(dashboard.directSellerPerformance, dashboard.latestDraw)}${ticketsPanel(dashboard.recentTickets)}</section>
       ${reportsWorkspace(reports)}
       ${weeklyAccountsPanel(dashboard.weeklyAccounts)}
       <section class="workspace hidden" data-panel="results">${dailyResultsPanel(dashboard.boards, dashboard.recentDraws ?? [], true)}${actionPanel(dashboard)}${profitTargetPanel(dashboard)}${candidatePanel(candidateData)}</section>
-      ${distributorPanel(dashboard.boards, dashboard.schemeCatalog, users, dashboard.bonusRules)}
       ${directSellerWorkspace(dashboard.boards, dashboard.schemeCatalog, users)}
       ${schemeCatalogPanel(dashboard.schemeCatalog)}
       ${lotCodePanel(dashboard.boards, dashboard.schemeCatalog)}
@@ -309,11 +308,11 @@ function profitTargetPanel(dashboard) {
 function performancePanel(rows, latestDraw) {
   if (expectedRole !== 'SUPER_ADMIN') return '';
   const content = !latestDraw
-    ? '<p class="muted">Publish a result to calculate distributor profit and loss.</p>'
+    ? '<p class="muted">Publish a result to calculate each Direct Seller profit and loss.</p>'
     : rows.length
-      ? `<p class="muted">Published Result: <span class="number">${latestDraw.winningNumber}</span> · ${escapeHtml(latestDraw.boardCode ?? '')} · ${escapeHtml(latestDraw.showLabel ?? '')} · ${escapeHtml(latestDraw.resultDate ?? '')}. Tickets are permanently settled.</p><table><thead><tr><th>Distributor</th><th>Qty</th><th>Sales</th><th>Margin</th><th>Prize</th><th>Net</th><th>Status</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${row.quantity}</td><td>${money(row.sales)}</td><td>${money(row.margin)}</td><td>${money(row.prizeExposure)}</td><td>${money(row.netOutcome)}</td><td><span class="status ${row.status.toLowerCase()}">${row.status.replace('_', ' ')}</span></td></tr>`).join('')}</tbody></table>`
-      : '<p class="muted">No distributors are connected.</p>';
-  return `<article class="card wide"><h2>Distributor profit / loss</h2>${content}</article>`;
+      ? `<p class="muted">Published Result: <span class="number">${latestDraw.winningNumber}</span> · ${escapeHtml(latestDraw.boardCode ?? '')} · ${escapeHtml(latestDraw.showLabel ?? '')} · ${escapeHtml(latestDraw.resultDate ?? '')}. Tickets are permanently settled.</p><table><thead><tr><th>Direct Seller</th><th>Qty</th><th>Sales</th><th>Margin</th><th>Prize</th><th>Net</th><th>Status</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${row.quantity}</td><td>${money(row.sales)}</td><td>${money(row.margin)}</td><td>${money(row.prizeExposure)}</td><td>${money(row.netOutcome)}</td><td><span class="status ${row.status.toLowerCase()}">${row.status.replace('_', ' ')}</span></td></tr>`).join('')}</tbody></table>`
+      : '<p class="muted">No Direct Sellers are connected.</p>';
+  return `<article class="card wide"><h2>Direct Seller profit / loss</h2>${content}</article>`;
 }
 function schemeCatalogPanel(catalog = []) {
   if (expectedRole !== 'SUPER_ADMIN') return '';
@@ -324,7 +323,7 @@ function schemeCatalogPanel(catalog = []) {
     <label>3 Digit Prize<input name="threeDigitPrize" type="number" min="0" step="1" required></label>
     <label>2 Digit Prize<input name="twoDigitPrize" type="number" min="0" step="1" required></label>
     <label>Single Digit Prize<input name="singleDigitPrize" type="number" min="0" step="1" required></label>
-    <label>Minimum Distributor Price<input name="minimumRate" type="text" inputmode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" required></label>
+    <label>Minimum Seller Price<input name="minimumRate" type="text" inputmode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" required></label>
     <label>MRP<input name="mrp" type="text" inputmode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" required></label>
     <label>Management Password<input name="actionPassword" type="password" autocomplete="off" required></label>
     <button>Create scheme</button>
@@ -841,8 +840,8 @@ async function previewResult(event) {
   event.preventDefault();
   try {
     const data = await request('/api/reports/result-preview', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) });
-    const distributorRows = data.distributorOutcomes?.length ? `<div class="bill-table"><table><thead><tr><th>Distributor</th><th>Qty</th><th>Sales</th><th>Margin</th><th>Prize</th><th>Profit / Loss</th><th>Status</th></tr></thead><tbody>${data.distributorOutcomes.map((item) => `<tr><td>${escapeHtml(item.name)}</td><td>${item.quantity}</td><td>${money(item.sales)}</td><td>${money(item.margin)}</td><td>${money(item.prizeExposure)}</td><td class="${item.netOutcome < 0 ? 'error' : ''}">${money(item.netOutcome)}</td><td><span class="status ${item.status.toLowerCase()}">${item.status.replace('_', ' ')}</span></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">No distributors are connected.</p>';
-    document.querySelector('#preview-result').innerHTML = `<div class="preview-box"><span class="muted">Projected result</span><strong class="${data.status === 'LOSS' ? 'error' : ''}">${money(data.projectedProfit)} (${data.profitPercentage}%)</strong><span class="status ${data.meetsMinimumProfit ? 'profit' : 'loss'}">${data.meetsMinimumProfit ? 'TARGET MET' : `BELOW ${data.minimumProfitLabel}`}</span><dl><div><dt>Ticket quantity</dt><dd>${data.ticketQuantity}</dd></div><div><dt>Admin margin</dt><dd>${money(data.adminMargin)}</dd></div><div><dt>Prize exposure</dt><dd>${money(data.totalPrizes)}</dd></div></dl><h3>Distributor projected profit / loss</h3>${distributorRows}</div>`;
+    const sellerRows = data.directSellerOutcomes?.length ? `<div class="bill-table"><table><thead><tr><th>Direct Seller</th><th>Qty</th><th>Sales</th><th>Margin</th><th>Prize</th><th>Profit / Loss</th><th>Status</th></tr></thead><tbody>${data.directSellerOutcomes.map((item) => `<tr><td>${escapeHtml(item.name)}</td><td>${item.quantity}</td><td>${money(item.sales)}</td><td>${money(item.margin)}</td><td>${money(item.prizeExposure)}</td><td class="${item.netOutcome < 0 ? 'error' : ''}">${money(item.netOutcome)}</td><td><span class="status ${item.status.toLowerCase()}">${item.status.replace('_', ' ')}</span></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">No Direct Sellers are connected.</p>';
+    document.querySelector('#preview-result').innerHTML = `<div class="preview-box"><span class="muted">Projected result</span><strong class="${data.status === 'LOSS' ? 'error' : ''}">${money(data.projectedProfit)} (${data.profitPercentage}%)</strong><span class="status ${data.meetsMinimumProfit ? 'profit' : 'loss'}">${data.meetsMinimumProfit ? 'TARGET MET' : `BELOW ${data.minimumProfitLabel}`}</span><dl><div><dt>Ticket quantity</dt><dd>${data.ticketQuantity}</dd></div><div><dt>Admin margin</dt><dd>${money(data.adminMargin)}</dd></div><div><dt>Prize exposure</dt><dd>${money(data.totalPrizes)}</dd></div></dl><h3>Direct Seller projected profit / loss</h3>${sellerRows}</div>`;
   } catch (error) { notify(error.message, true); }
 }
 async function publishResult(event) {

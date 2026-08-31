@@ -162,25 +162,17 @@ const routes = {
   },
   'GET /api/users': ({ user }) => ok(visibleUsers(user).map(publicUser)),
   'POST /api/users': ({ body, user }) => {
-    const allowed = { SUPER_ADMIN: ['DISTRIBUTOR', 'SELLER'], DISTRIBUTOR: ['SELLER'] };
-    if (!allowed[user.role]?.includes(body.role)) return fail(403, 'You cannot create this user tier');
-    if (user.role === 'SUPER_ADMIN') requireActionPassword(body, user, 'management');
+    if (user.role !== 'SUPER_ADMIN' || body.role !== 'SELLER') return fail(403, 'NGS allows Direct Seller accounts only');
+    requireActionPassword(body, user, 'management');
     if (!body.name?.trim() || !/^\d{10,15}$/.test(String(body.phone))) return fail(400, 'Valid name and phone are required');
     if (store.users.some((item) => item.phone === String(body.phone))) return fail(409, 'Phone number already exists');
     let schemeRates;
     let distributorAccess;
-    if (body.role === 'DISTRIBUTOR') {
-      distributorAccess = validateDistributorLotAssignment(body.lotCodeId, body.catalogSchemeRates);
-      distributorAccess.lotCodeGraceMinutes = { [distributorAccess.lotCodeId]: validateGraceMinutes(body.graceMinutes) };
-      schemeRates = deriveNumberTypeRates(distributorAccess.catalogSchemeRates);
-    }
-    if (body.role === 'SELLER' && user.role === 'SUPER_ADMIN') {
-      distributorAccess = validateDistributorLotAssignment(body.lotCodeId, body.catalogSchemeRates);
-      schemeRates = deriveNumberTypeRates(distributorAccess.catalogSchemeRates);
-    }
+    distributorAccess = validateDistributorLotAssignment(body.lotCodeId, body.catalogSchemeRates);
+    schemeRates = deriveNumberTypeRates(distributorAccess.catalogSchemeRates);
     const commissionPercentage = body.role === 'SELLER' ? Number(body.commissionPercentage ?? 0) : 0;
     if (body.role === 'SELLER' && (!Number.isFinite(commissionPercentage) || commissionPercentage < 0 || commissionPercentage > 50)) return fail(400, 'Seller commission percentage must be between 0 and 50');
-    const record = createRecord('users', { parentId: user.id, role: body.role, name: body.name.trim(), phone: String(body.phone), passwordHash: hashPassword(body.password), isActive: true, ...(body.role === 'SELLER' ? { commissionPercentage } : {}), ...(schemeRates ? { schemeRates, ...distributorAccess } : {}) });
+    const record = createRecord('users', { parentId: user.id, role: 'SELLER', name: body.name.trim(), phone: String(body.phone), passwordHash: hashPassword(body.password), isActive: true, commissionPercentage, schemeRates, ...distributorAccess });
     audit(user.id, 'USER_CREATED', 'user', record.id, { role: record.role });
     return created(publicUser(record));
   },
@@ -637,8 +629,7 @@ function reportMatchesResultScope(report, scope) {
 function visibleSaleReports(user) {
   if (user.role === 'SUPER_ADMIN') return store.saleReports;
   if (user.role === 'SELLER') return store.saleReports.filter((item) => item.sellerId === user.id);
-  const sellerIds = new Set(descendantsOf(user.id).filter((item) => item.role === 'SELLER').map((item) => item.id));
-  return store.saleReports.filter((item) => item.distributorId === user.id && sellerIds.has(item.sellerId));
+  return [];
 }
 function reportSummary(report) {
   const entries = store.tickets.filter((item) => item.reportId === report.id);
@@ -754,7 +745,7 @@ function validateResultPublishTime(scope) {
   const show = (board?.schedules ?? []).find((item) => item.id === scope.showId);
   const currentDate = localDateKey();
   const currentMinutes = minutesInTimeZone();
-  const maximumGrace = Math.max(0, ...store.users.filter((item) => item.role === 'DISTRIBUTOR' && (item.lotCodeIds ?? []).includes(scope.boardId)).map((item) => Number(item.lotCodeGraceMinutes?.[scope.boardId]?.[scope.showId] ?? 0)));
+  const maximumGrace = Math.max(0, ...store.users.filter((item) => item.role === 'SELLER' && item.parentId === 'admin-1' && (item.lotCodeIds ?? []).includes(scope.boardId)).map((item) => Number(item.lotCodeGraceMinutes?.[scope.boardId]?.[scope.showId] ?? 0)));
   if (resultPublishReady(show, scope.resultDate, currentDate, currentMinutes, maximumGrace)) return;
   const error = new Error(scope.resultDate > currentDate ? 'A future Result date cannot be published' : `Result can be published only one minute after ${show?.label ?? 'the Show'} entry closes`);
   error.status = 409;
@@ -815,7 +806,7 @@ function buildResultPreview(winningNumber, scope) {
     meetsMinimumProfit,
     status: projectedProfit > 0 ? 'PROFIT' : projectedProfit < 0 ? 'LOSS' : 'BREAK_EVEN',
     boardId: scope.boardId, showId: scope.showId, resultDate: scope.resultDate,
-    distributorOutcomes: buildDistributorPerformance(winningNumber, scope)
+    directSellerOutcomes: buildDirectSellerPerformance(winningNumber, scope)
   };
 }
 
@@ -842,7 +833,7 @@ function buildDashboard(user) {
     users: visibleUsers(user).length,
     recentTickets: tickets.slice(-100).reverse(),
     bonusRules: user.role === 'SUPER_ADMIN' ? store.bonusRules.filter((item) => item.ownerId === user.id) : undefined,
-    distributorPerformance: user.role === 'SUPER_ADMIN' ? buildDistributorPerformance() : undefined,
+    directSellerPerformance: user.role === 'SUPER_ADMIN' ? buildDirectSellerPerformance() : undefined,
     actionSecurity: user.role === 'SUPER_ADMIN' ? { resultPasswordConfigured: Boolean(store.security.resultPasswordHash), managementPasswordConfigured: Boolean(store.security.managementPasswordHash) } : undefined,
     license: licenseStatus(),
     weeklyAccounts: user.role === 'SUPER_ADMIN' ? buildWeeklyAccounts() : undefined
@@ -967,12 +958,11 @@ function buildWeeklyAccounts(selectedDate) {
   return { ...range, totalSales: rows.reduce((sum, item) => sum + item.sales, 0), totalPrizes: rows.reduce((sum, item) => sum + item.prizes, 0), totalExpenses, finalNetAmount: days.reduce((sum, item) => sum + item.netAmount, 0), totalDue: rows.reduce((sum, item) => sum + item.netDue, 0), totalReceived: rows.reduce((sum, item) => sum + item.received, 0), totalBalance: rows.reduce((sum, item) => sum + item.balance, 0), days, rows };
 }
 
-function buildDistributorPerformance(previewWinningNumber = null, scope = null) {
+function buildDirectSellerPerformance(previewWinningNumber = null, scope = null) {
   const latestDraw = store.draws.at(-1) ?? null;
   const winningNumber = previewWinningNumber ?? latestDraw?.winningNumber ?? null;
-  return store.users.filter((item) => item.role === 'DISTRIBUTOR').map((distributor) => {
-    const sellerIds = descendantsOf(distributor.id).filter((item) => item.role === 'SELLER').map((item) => item.id);
-    const tickets = store.tickets.filter((ticket) => sellerIds.includes(ticket.sellerId) && (scope ? ticketMatchesResultScope(ticket, scope) : latestDraw ? ticket.drawId === latestDraw.id : ticket.status === 'ACTIVE'));
+  return store.users.filter((item) => item.role === 'SELLER' && item.parentId === 'admin-1').map((seller) => {
+    const tickets = store.tickets.filter((ticket) => ticket.sellerId === seller.id && (scope ? ticketMatchesResultScope(ticket, scope) : latestDraw ? ticket.drawId === latestDraw.id : ticket.status === 'ACTIVE'));
     const quantity = tickets.reduce((sum, ticket) => sum + ticket.quantity, 0);
     const sales = tickets.reduce((sum, ticket) => sum + ticket.total, 0);
     const prizeExposure = latestDraw && !scope && !previewWinningNumber ? tickets.reduce((sum, ticket) => sum + ticket.prize, 0) : winningNumber ? tickets.reduce((sum, ticket) => {
@@ -982,8 +972,8 @@ function buildDistributorPerformance(previewWinningNumber = null, scope = null) 
     const margin = tickets.reduce((sum, ticket) => sum + (Number(ticket.unitPrice) - Number(ticket.rateSnapshot?.distributorRate ?? ticket.unitPrice)) * ticket.quantity, 0);
     const netOutcome = margin - prizeExposure;
     return {
-      distributorId: distributor.id,
-      name: distributor.name,
+      sellerId: seller.id,
+      name: seller.name,
       quantity,
       sales,
       margin,
@@ -995,7 +985,7 @@ function buildDistributorPerformance(previewWinningNumber = null, scope = null) 
 }
 
 function visibleUsers(user) {
-  if (user.role === 'SUPER_ADMIN') return descendantsOf(user.id).filter((item) => ['DISTRIBUTOR', 'SELLER'].includes(item.role));
+  if (user.role === 'SUPER_ADMIN') return descendantsOf(user.id).filter((item) => item.role === 'SELLER');
   return store.users.filter((item) => item.parentId === user.id);
 }
 function visibleTickets(user) {
