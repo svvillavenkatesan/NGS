@@ -143,9 +143,19 @@ const routes = {
       const id = /^show[1-5]$/.test(String(item.id ?? '')) ? String(item.id) : label.toLowerCase().replace(/[^a-z0-9]+/g, '');
       return { id, label, startTime, endTime, enabled: true };
     });
+    const specialDate = String(body.dateOverride?.date ?? '');
+    const specialEndTime = String(body.dateOverride?.endTime ?? '');
+    let dateOverride = null;
+    if (specialDate || specialEndTime) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(specialDate) || Number.isNaN(Date.parse(`${specialDate}T00:00:00+05:30`)) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(specialEndTime)) return fail(400, 'Special closing requires a valid date and closing time');
+      const firstShow = schedules.find((item) => item.id === 'show1');
+      if (!firstShow || specialEndTime <= firstShow.startTime) return fail(400, 'Special closing time must be after the Kerala entry start time');
+      dateOverride = { date: specialDate, showId: 'show1', endTime: specialEndTime };
+    }
     board.schemeIds = schemeIds;
     board.schedules = schedules;
-    audit(user.id, 'BOARD_CONFIG_UPDATED', 'board', null, { boardId: board.id, schemeIds, schedules });
+    board.dateOverride = dateOverride;
+    audit(user.id, 'BOARD_CONFIG_UPDATED', 'board', null, { boardId: board.id, schemeIds, schedules, dateOverride });
     return ok(board);
   },
   'POST /api/settings/scheme-catalog': ({ body, user }) => {
@@ -594,7 +604,7 @@ function validateTicket(body, user) {
   return { boardId: board.id, boardName: board.name, showId: activeSchedule?.id ?? null, showLabel: activeSchedule?.label ?? null, catalogSchemeId: catalogScheme.id, catalogSchemeName: catalogScheme.name, catalogPattern: catalogScheme.pattern, number: String(body.number), scheme: body.scheme, quantity, unitPrice, rateSnapshot, prizeSnapshot };
 }
 function validateSellingWindow(board, distributor, requestedShowId) {
-  const schedules = (board.schedules ?? []).filter((item) => item.enabled);
+  const schedules = schedulesForDate(board, localDateKey()).filter((item) => item.enabled);
   if (!schedules.length) return null;
   const currentMinutes = minutesInTimeZone();
   const grace = distributor?.lotCodeGraceMinutes?.[board.id] ?? {};
@@ -787,6 +797,11 @@ function resultShows(board) {
   return schedules.length ? schedules : [{ id: 'all-day', label: 'All Day' }];
 }
 
+function schedulesForDate(board, date) {
+  const override = board?.dateOverride;
+  return (board?.schedules ?? []).map((schedule) => override?.date === date && override.showId === schedule.id ? { ...schedule, endTime: override.endTime, dateOverrideApplied: true } : schedule);
+}
+
 function validateResultScope(body) {
   const board = store.settings.boards.find((item) => item.id === String(body.boardId) && item.enabled);
   if (!board) { const error = new Error('Select a valid Lot Code'); error.status = 400; throw error; }
@@ -799,7 +814,7 @@ function validateResultScope(body) {
 
 function validateResultPublishTime(scope) {
   const board = store.settings.boards.find((item) => item.id === scope.boardId);
-  const show = (board?.schedules ?? []).find((item) => item.id === scope.showId);
+  const show = schedulesForDate(board, scope.resultDate).find((item) => item.id === scope.showId);
   const currentDate = localDateKey();
   const currentMinutes = minutesInTimeZone();
   const maximumGrace = Math.max(0, ...store.users.filter((item) => item.role === 'SELLER' && item.parentId === 'admin-1' && (item.lotCodeIds ?? []).includes(scope.boardId)).map((item) => Number(item.lotCodeGraceMinutes?.[scope.boardId]?.[scope.showId] ?? 0)));
@@ -915,7 +930,7 @@ function dashboardBoards(user) {
     const lotCodeRates = accessOwner?.lotCodeSchemeRates?.[board.id] ?? {};
     const schemeIds = (board.schemeIds ?? []).filter((schemeId) => lotCodeRates[schemeId]?.enabled);
     const grace = accessOwner?.lotCodeGraceMinutes?.[board.id] ?? {};
-    const schedules = (board.schedules ?? []).map((schedule) => {
+    const schedules = schedulesForDate(board, localDateKey()).map((schedule) => {
       const graceMinutes = Number(grace[schedule.id] ?? 0);
       const [hour, minute] = schedule.endTime.split(':').map(Number);
       const effective = Math.min(23 * 60 + 59, hour * 60 + minute + graceMinutes);

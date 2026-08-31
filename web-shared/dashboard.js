@@ -331,7 +331,7 @@ function schemeCatalogPanel(catalog = []) {
 }
 function lotCodePanel(boards = [], catalog = []) {
   if (expectedRole !== 'SUPER_ADMIN') return '';
-  return `<section class="workspace hidden" data-panel="lot-codes"><article class="card wide"><p class="muted">LOT CODE ASSIGNMENT & TIMINGS</p><h2>Configure Lot Code</h2><form id="board-config-form"><label>Lot Code<select name="boardId" id="config-lot-code">${boards.map((board) => `<option value="${board.id}">${escapeHtml(board.code)} - ${escapeHtml(board.name)}</option>`).join('')}</select></label><fieldset class="scheme-rates"><legend>Available schemes</legend><p class="muted">The 8 Single/Double schemes are common to every Lot Code. Select any additional 3D and 4D schemes required.</p><div>${catalog.map((item) => `<label class="check board-scheme"><input type="checkbox" name="assignedScheme" value="${item.id}" data-universal="${item.universal ? 'true' : 'false'}" ${item.universal || boards[0]?.schemeIds?.includes(item.id) ? 'checked' : ''} ${item.universal ? 'disabled' : ''}> ${escapeHtml(item.name)}${item.universal ? ' · Common' : ''}</label>`).join('')}</div></fieldset><fieldset class="scheme-rates"><legend>Daily timings — 5 Shows</legend>${scheduleRow('show1', 'Show 1', '09:00', '11:00')}${scheduleRow('show2', 'Show 2', '13:00', '15:00')}${scheduleRow('show3', 'Show 3', '17:00', '19:00')}${scheduleRow('show4', 'Show 4', '', '')}${scheduleRow('show5', 'Show 5', '', '')}</fieldset><label>Management Password<input name="actionPassword" type="password" autocomplete="off" required></label><button>Save Lot Code configuration</button></form></article>
+  return `<section class="workspace hidden" data-panel="lot-codes"><article class="card wide"><p class="muted">LOT CODE ASSIGNMENT & TIMINGS</p><h2>Configure Lot Code</h2><form id="board-config-form"><label>Lot Code<select name="boardId" id="config-lot-code">${boards.map((board) => `<option value="${board.id}">${escapeHtml(board.code)} - ${escapeHtml(board.name)}</option>`).join('')}</select></label><fieldset class="scheme-rates"><legend>Available schemes</legend><p class="muted">The 8 Single/Double schemes are common to every Lot Code. Select any additional 3D and 4D schemes required.</p><div>${catalog.map((item) => `<label class="check board-scheme"><input type="checkbox" name="assignedScheme" value="${item.id}" data-universal="${item.universal ? 'true' : 'false'}" ${item.universal || boards[0]?.schemeIds?.includes(item.id) ? 'checked' : ''} ${item.universal ? 'disabled' : ''}> ${escapeHtml(item.name)}${item.universal ? ' · Common' : ''}</label>`).join('')}</div></fieldset><fieldset class="scheme-rates"><legend id="timing-legend">Daily Timings</legend>${scheduleRow('show1', 'Show 1', '00:01', '15:00')}${scheduleRow('show2', 'Show 2', '00:01', '17:58')}${scheduleRow('show3', 'Show 3', '00:01', '19:58')}${scheduleRow('show4', 'Show 4', '', '')}${scheduleRow('show5', 'Show 5', '', '')}</fieldset><fieldset class="scheme-rates" id="kerala-date-override"><legend>Kerala Special-Date Closing (Optional)</legend><p class="muted">Use this only when Kerala entry must close earlier on one specific date. The normal 3:00 PM closing resumes automatically on other dates.</p><label>Special Date<input type="date" name="specialDate"></label><label>Closing Time<input type="time" name="specialEndTime" value="14:00"></label></fieldset><label>Management Password<input name="actionPassword" type="password" autocomplete="off" required></label><button>Save Lot Code configuration</button></form></article>
   <article class="card wide"><p class="muted">NEW LOT CODE</p><h2>Add Lot Code</h2><form id="board-form" class="catalog-form"><label>Lot Code<input name="code" placeholder="Example: PB" maxlength="8" required></label><label class="catalog-name">Lot Code name<input name="name" placeholder="Example: Punjab" minlength="2" maxlength="40" required></label><label>Management Password<input name="actionPassword" type="password" autocomplete="off" required></label><button>Add Lot Code</button></form></article></section>`;
 }
 function securityPanel(security = {}) {
@@ -344,7 +344,7 @@ function licensePanel(license = {}) {
   return `<section class="workspace hidden" data-panel="license"><article class="card wide"><p class="muted">SOFTWARE LICENSE</p><h2>${escapeHtml(label || 'Unknown')}</h2><div class="metrics"><div><span>Status</span><strong>${escapeHtml(license.status || 'Unknown')}</strong></div><div><span>Days remaining</span><strong>${Number(license.daysRemaining || 0)}</strong></div><div><span>Trial ends</span><strong>${license.trialEndsAt ? new Date(license.trialEndsAt).toLocaleString() : '—'}</strong></div></div><p class="muted">Device ID</p><strong>${escapeHtml(license.deviceId || '—')}</strong>${license.canOperate ? '<p class="muted">Ticket Entry and Result Publish are enabled.</p>' : '<p class="error">Ticket Entry and Result Publish are locked. Contact the software administrator.</p>'}</article></section>`;
 }
 function scheduleRow(id, label, start, end) {
-  return `<div class="schedule-row"><label class="check"><input type="checkbox" name="schedule_${id}"> ${label}</label><label>Start<input type="time" name="start_${id}" value="${start}"></label><label>End<input type="time" name="end_${id}" value="${end}"></label></div>`;
+  return `<div class="schedule-row" data-schedule-row="${id}"><label class="check"><input type="checkbox" name="schedule_${id}"> ${label}</label><label>Start<input type="time" name="start_${id}" value="${start}"></label><label>End<input type="time" name="end_${id}" value="${end}"></label></div>`;
 }
 function prizeGroup(title, schemes, values) {
   return `<fieldset class="prize-group"><legend>${title}</legend><div class="prize-grid">${schemes.map(([key, label]) => `<label><span>${label}</span><input name="${key}" type="number" min="0" step="1" value="${values[key]}" required></label>`).join('')}</div></fieldset>`;
@@ -563,12 +563,15 @@ function wireActions() {
   document.querySelector('#board-config-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const values = new FormData(event.currentTarget);
-    const schedules = ['show1', 'show2', 'show3', 'show4', 'show5'].map((key, index) => ({ id: key, label: `Show ${index + 1}`, enabled: values.get(`schedule_${key}`) === 'on', startTime: values.get(`start_${key}`), endTime: values.get(`end_${key}`) }));
-    const payload = { boardId: values.get('boardId'), schemeIds: values.getAll('assignedScheme'), schedules, actionPassword: values.get('actionPassword') };
+    const board = currentDashboard.boards.find((item) => item.id === values.get('boardId'));
+    const schedules = ['show1', 'show2', 'show3', 'show4', 'show5'].map((key, index) => ({ id: key, label: board?.schedules?.find((item) => item.id === key)?.label ?? `${board?.code ?? 'Show'} ${index + 1}`, enabled: values.get(`schedule_${key}`) === 'on', startTime: values.get(`start_${key}`), endTime: values.get(`end_${key}`) }));
+    const dateOverride = board?.code === 'KL' && values.get('specialDate') && values.get('specialEndTime') ? { date: values.get('specialDate'), endTime: values.get('specialEndTime') } : null;
+    const payload = { boardId: values.get('boardId'), schemeIds: values.getAll('assignedScheme'), schedules, dateOverride, actionPassword: values.get('actionPassword') };
     try { await request('/api/settings/boards/config', { method: 'PUT', body: JSON.stringify(payload) }); notify('Lot Code schemes and timings saved'); await renderDashboard(); switchPanel('lot-codes'); }
     catch (error) { notify(error.message, true); }
   });
   document.querySelector('#config-lot-code')?.addEventListener('change', updateLotCodeSchemeSelection);
+  updateLotCodeSchemeSelection();
   document.querySelector('#security-password-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     try { await request('/api/security/action-passwords', { method: 'PUT', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); notify('Security passwords saved'); event.currentTarget.reset(); await renderDashboard(); switchPanel('security'); }
@@ -744,6 +747,16 @@ function selectAllDistributorSchemes(event) {
 function updateLotCodeSchemeSelection() {
   const selectedId = document.querySelector('#config-lot-code')?.value;
   const lotCode = currentDashboard.boards.find((item) => item.id === selectedId);
+  const isKerala = lotCode?.code === 'KL';
+  const isDear = lotCode?.code === 'DR';
+  document.querySelector('#timing-legend').textContent = isKerala ? 'Kerala Timing — 1 Show' : isDear ? 'Dear Timings — 3 Shows' : 'Daily Timings';
+  document.querySelector('#kerala-date-override')?.classList.toggle('hidden', !isKerala);
+  document.querySelectorAll('[data-schedule-row]').forEach((row) => {
+    const index = Number(row.dataset.scheduleRow.replace('show', ''));
+    const hidden = isKerala ? index > 1 : isDear ? index > 3 : false;
+    row.classList.toggle('hidden', hidden);
+    row.querySelectorAll('input').forEach((input) => { input.disabled = hidden; });
+  });
   document.querySelectorAll('#board-config-form [name="assignedScheme"]').forEach((input) => {
     input.checked = input.dataset.universal === 'true' || Boolean(lotCode?.schemeIds?.includes(input.value));
   });
@@ -756,6 +769,10 @@ function updateLotCodeSchemeSelection() {
     if (start) start.value = schedule?.startTime ?? start.defaultValue;
     if (end) end.value = schedule?.endTime ?? end.defaultValue;
   }
+  const specialDate = document.querySelector('[name="specialDate"]');
+  const specialEndTime = document.querySelector('[name="specialEndTime"]');
+  if (specialDate) specialDate.value = lotCode?.dateOverride?.date ?? '';
+  if (specialEndTime) specialEndTime.value = lotCode?.dateOverride?.endTime ?? '14:00';
 }
 function addToBill(event) {
   event.preventDefault();
