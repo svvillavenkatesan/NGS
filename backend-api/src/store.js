@@ -50,7 +50,7 @@ export const store = {
     }
   },
   users: [
-    user('owner-1', null, 'OWNER', 'System Owner', '9000000000', 'Owner@123'),
+    user('owner-1', null, 'OWNER', 'Joker', '9000000000', 'Owner@123'),
     user('admin-1', null, 'SUPER_ADMIN', 'Super Admin', '9000000001', 'Admin@123'),
     { ...user('seller-1', 'admin-1', 'SELLER', 'Demo Seller', '9000000004', 'Seller@123'), commissionPercentage: 0, lotCodeIds: ['kerala'], lotCodeSchemeRates: { kerala: Object.fromEntries(initialSchemeIds.map((id) => [id, { enabled: true, rate: initialRateFor(id) }])) }, catalogSchemeRates: Object.fromEntries(initialSchemeIds.map((id) => [id, { enabled: true, rate: initialRateFor(id) }])) }
   ], contests: [], tickets: [], bills: [], draws: [], saleReports: [], reportCorrections: [], weeklyPayments: [], dailyExpenses: [], bonusRules: [], passwordResetRequests: [], licenseRenewalRequests: [], audit: []
@@ -88,7 +88,7 @@ for (const account of store.users.filter((item) => item.role === 'SELLER')) {
 store.users = store.users.filter((item) => !['SUB_DISTRIBUTOR', 'DISTRIBUTOR'].includes(item.role));
 store.settings.subDistributorEnabled = false;
 store.settings.maxSellers ??= 2000;
-if (!store.users.some((item) => item.role === 'OWNER')) store.users.unshift(user('owner-1', null, 'OWNER', 'System Owner', '9000000000', 'Owner@123'));
+if (!store.users.some((item) => item.role === 'OWNER')) store.users.unshift(user('owner-1', null, 'OWNER', 'Joker', '9000000000', 'Owner@123'));
 if (process.env.NODE_ENV === 'production') {
   for (const [role, demoPassword, environmentKey] of [['OWNER', 'Owner@123', 'OWNER_INITIAL_PASSWORD'], ['SUPER_ADMIN', 'Admin@123', 'ADMIN_INITIAL_PASSWORD']]) {
     const account = store.users.find((item) => item.role === role && verifyPassword(demoPassword, item.passwordHash));
