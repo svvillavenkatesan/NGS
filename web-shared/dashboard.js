@@ -96,8 +96,8 @@ function actionPanel(dashboard) {
   </form>` : '<p class="error">No selling schemes are assigned to this account.</p>'}</article>`;
   }
   if (expectedRole === 'SUPER_ADMIN') return `
-    <article class="card" id="publish-card"><h2>Publish result</h2><p class="muted">A published Lot Code + Show + Date result is permanently locked.</p><form id="result-form">${resultScopeFields(dashboard.boards, 'publish')}<label>Four-digit winning number (DABC)<input id="publish-number" name="winningNumber" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="5846" required></label><label class="check"><input name="overrideBelowTarget" type="checkbox"> Allow Super Admin override when the minimum target is not met</label><label>Override reason<input name="overrideReason" placeholder="Reason for publishing below the target"></label><label>Result Password<input name="actionPassword" type="password" autocomplete="off" required></label><button>Publish and permanently lock</button></form></article>
-    <article class="card"><h2>Result profit preview</h2><p class="muted">Only all sales from the selected Lot Code, Show, and date are included.</p><form id="preview-form">${resultScopeFields(dashboard.boards, 'preview')}<label>Possible four-digit winning number<input name="winningNumber" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="5846" required></label><button>Calculate profit</button></form><div id="preview-result"></div></article>`;
+    <article class="card" id="publish-card"><h2>Publish Result</h2><form id="result-form">${resultScopeFields(dashboard.boards, 'publish')}<label>Four-digit winning number (DABC)<input id="publish-number" name="winningNumber" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="5846" required></label><label class="check"><input name="overrideBelowTarget" type="checkbox"> Override minimum target</label><label>Override reason<input name="overrideReason"></label><label>Result Password<input name="actionPassword" type="password" autocomplete="off" required></label><button>Publish Result</button></form></article>
+    <article class="card"><h2>Result Preview</h2><form id="preview-form">${resultScopeFields(dashboard.boards, 'preview')}<label>Four-digit winning number<input name="winningNumber" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="5846" required></label><button>Calculate</button></form><div id="preview-result"></div></article>`;
   return `<article class="card"><h2>Add Seller</h2><p class="muted">There is no separate Sub-Distributor role. A Seller with a percentage receives commission.</p><form id="user-form"><input type="hidden" name="role" value="SELLER"><label>Seller name<input name="name" required></label><label>Phone<input name="phone" inputmode="numeric" pattern="[0-9]{10,15}" required></label><label>Temporary password<input name="password" type="password" minlength="8" required></label><label>Commission %<input name="commissionPercentage" type="number" min="0" max="50" step="0.01" value="0" required></label><button>Create Seller</button></form></article>`;
 }
 function sellerControlCenter(dashboard, users, reports) {
@@ -126,7 +126,7 @@ function distributorAccountsPanel(accounts) {
 }
 function distributorAssignedCatalog(dashboard) {
   const rates = dashboard.lotCodeSchemeRates ?? {};
-  return `<article class="card wide"><h2>Assigned Lot Codes and Schemes</h2><p class="muted">Only Lot Codes and Schemes assigned by the Super Admin are shown here.</p>${dashboard.boards.map((board) => `<section class="scheme-group"><h3>${escapeHtml(board.code)} - ${escapeHtml(board.name)}</h3><div>${Object.entries(rates[board.id] ?? {}).filter(([, value]) => value.enabled).map(([id, value]) => `<span class="rate-tag">${escapeHtml(dashboard.schemeCatalog.find((item) => item.id === id)?.name ?? id)} · ${money(value.rate)}</span>`).join(' ') || '<span class="muted">No schemes assigned</span>'}</div></section>`).join('')}</article>`;
+  return `<article class="card wide"><h2>Lot Codes and Schemes</h2>${dashboard.boards.map((board) => `<section class="scheme-group"><h3>${escapeHtml(board.code)} - ${escapeHtml(board.name)}</h3><div>${Object.entries(rates[board.id] ?? {}).filter(([, value]) => value.enabled).map(([id, value]) => `<span class="rate-tag">${escapeHtml(dashboard.schemeCatalog.find((item) => item.id === id)?.name ?? id)} · ${money(value.rate)}</span>`).join(' ') || '<span class="muted">No schemes assigned</span>'}</div></section>`).join('')}</article>`;
 }
 function distributorResultsPanel(draws) {
   const boards = currentDashboard.boards ?? [];
@@ -134,7 +134,7 @@ function distributorResultsPanel(draws) {
     const boardDraws = draws.filter((draw) => draw.boardId === board.id);
     return `<article class="card wide"><p class="muted">${escapeHtml(board.name)} LOT CODE</p><h2>${escapeHtml(board.code)} Result</h2>${boardDraws.length ? `<table><thead><tr><th>Date</th><th>Show</th><th>Result</th><th>Status</th></tr></thead><tbody>${boardDraws.map((draw) => `<tr><td>${escapeHtml(draw.resultDate ?? '')}</td><td>${escapeHtml(draw.showLabel ?? '')}</td><td class="number">${escapeHtml(draw.winningNumber)}</td><td>${draw.locked ? 'LOCKED' : draw.status}</td></tr>`).join('')}</tbody></table>` : `<p class="muted">${escapeHtml(board.code)} result has not been published yet.</p>`}</article>`;
   };
-  return `<div class="title-row compact"><div><h2>Published Results</h2><p class="muted">Each Lot Code result is permanently locked separately.</p></div></div>${boards.map(resultTable).join('')}`;
+  return `<div class="title-row compact"><h2>Published Results</h2></div>${boards.map(resultTable).join('')}`;
 }
 function indiaDateOffset(offset = 0) {
   const now = new Date(Date.now() + 330 * 60 * 1000 + offset * 24 * 60 * 60 * 1000);
@@ -166,7 +166,7 @@ function resultScopeFields(boards = [], prefix) {
 function distributorPanel(lotCodes = [], catalog = [], users = [], bonusRules = []) {
   if (expectedRole !== 'SUPER_ADMIN') return '';
   return `<section class="workspace hidden" data-panel="distributors">
-    <article class="card wide"><p class="muted">DISTRIBUTOR MANAGEMENT</p><h2>Add Distributor</h2><p class="muted">Add a new distributor or select an existing distributor to update their schemes.</p><form id="distributor-form">
+    <article class="card wide"><h2>Select Distributor</h2><form id="distributor-form">
       <input type="hidden" name="role" value="DISTRIBUTOR">
       <label>Select Distributor<select name="distributorId" id="distributor-selector"><option value="">+ Add New Distributor</option>${users.filter((item) => item.role === 'DISTRIBUTOR').map((item) => `<option value="${item.id}">${escapeHtml(item.name)} - ${escapeHtml(item.phone)}</option>`).join('')}</select></label>
       <div id="new-distributor-fields" class="compact-fields">
@@ -175,7 +175,7 @@ function distributorPanel(lotCodes = [], catalog = [], users = [], bonusRules = 
         <label>Temporary password<input name="password" type="password" minlength="8" autocomplete="new-password" required></label>
       </div>
       <label>Lot Code<select name="lotCodeId" id="distributor-lot-code">${lotCodes.map((item) => `<option value="${item.id}">${escapeHtml(item.code)} - ${escapeHtml(item.name)}</option>`).join('')}</select></label>
-      <fieldset class="scheme-rates"><legend>Common schemes</legend><p class="muted">Automatically available to every Distributor and Seller.</p><div>${catalog.filter((scheme) => scheme.universal).map((scheme) => `<span class="rate-tag">${escapeHtml(scheme.name)}</span>`).join(' ')}</div></fieldset>
+      <fieldset class="scheme-rates"><legend>Common Schemes</legend><div>${catalog.filter((scheme) => scheme.universal).map((scheme) => `<span class="rate-tag">${escapeHtml(scheme.name)}</span>`).join(' ')}</div></fieldset>
       <fieldset class="scheme-rates"><legend>3D Common Selection</legend>
         <div class="scheme-toolbar"><p class="muted">Select the required 3D Schemes for this Lot Code.</p><button type="button" class="secondary" id="select-all-distributor-schemes">Select All</button></div>
         <div class="subscheme-grid compact-scheme-grid">${catalog.filter((scheme) => !scheme.universal && scheme.pattern === 'ABC').map((scheme) => {
