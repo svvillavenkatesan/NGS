@@ -9,6 +9,7 @@ tmp/
 backend-api/data/application-data.json
 backend-api/data/application-data.json.tmp
 backend-api/data/session-secret
+backend-api/data/account-license-secret
 backend-api/data/license-state.json
 backups/
 releases/*.apk

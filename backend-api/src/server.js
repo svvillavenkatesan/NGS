@@ -9,11 +9,13 @@ import { calculateBonus } from './services/bonus-engine.js';
 import { calculateTierProfits, validatePricingHierarchy } from './services/pricing-engine.js';
 import { findOpenSchedule, minutesInTimeZone, resultPublishReady } from './services/schedule-engine.js';
 import { licenseStatus, requireOperationalLicense } from './license.js';
+import { accountLicenseStatus, issueAccountLicense } from './account-license.js';
 
 const port = Number(process.env.PORT ?? 4000);
 const root = resolve(import.meta.dirname, '../..');
 const clients = new Set();
 const loginAttempts = new Map();
+ensureSuperAdminLicenses();
 migrateLegacyReports();
 persistStore();
 
@@ -75,7 +77,7 @@ const routes = {
       const currentSellers = activeSellerCount(item.id);
       const totalSellersCreated = store.users.filter((account) => account.role === 'SELLER' && account.parentId === item.id).length;
       const sellerLimit = Number(item.sellerLimit ?? store.settings.maxSellers ?? 2000);
-      return { ...publicUser(item), passwordResetPending: store.passwordResetRequests.some((request) => request.userId === item.id && request.status === 'PENDING'), currentSellers, totalSellersCreated, sellerLimit, remaining: Math.max(0, sellerLimit - currentSellers), financials: ownerFinancialSummary(item.id) };
+      return { ...publicUser(item), accountValidity: accountLicenseStatus(item), passwordResetPending: store.passwordResetRequests.some((request) => request.userId === item.id && request.status === 'PENDING'), currentSellers, totalSellersCreated, sellerLimit, remaining: Math.max(0, sellerLimit - currentSellers), financials: ownerFinancialSummary(item.id) };
     });
     return ok({ totalSuperAdmins: superAdmins.length, currentSellers: superAdmins.reduce((sum, item) => sum + item.currentSellers, 0), totalCapacity: superAdmins.reduce((sum, item) => sum + item.sellerLimit, 0), superAdmins });
   },
@@ -86,12 +88,16 @@ const routes = {
     const phone = String(body.phone ?? '').trim();
     const password = String(body.password ?? '');
     const sellerLimit = Number(body.sellerLimit);
+    const validityMonths = Number(body.validityMonths);
     if (name.length < 2 || name.length > 60 || !/^\d{10,15}$/.test(phone)) return fail(400, 'Valid name and phone are required');
     if (password.length < 8) return fail(400, 'Temporary password must contain at least 8 characters');
     if (!Number.isInteger(sellerLimit) || sellerLimit < 1 || sellerLimit > 100000) return fail(400, 'Seller limit must be between 1 and 100000');
+    if (![6, 12].includes(validityMonths)) return fail(400, 'Select 6 Months or 1 Year validity');
     if (store.users.some((item) => item.phone === phone)) return fail(409, 'Phone number already exists');
     const record = createRecord('users', { parentId: user.id, role: 'SUPER_ADMIN', superAdminCode: nextSuperAdminCode(), name, phone, passwordHash: hashPassword(password), sellerLimit, isActive: true });
-    audit(user.id, 'SUPER_ADMIN_CREATED', 'user', record.id, { superAdminCode: record.superAdminCode, sellerLimit });
+    const license = issueAccountLicense({ accountId: record.id, periodMonths: validityMonths, sequence: 1, startsAt: new Date() });
+    Object.assign(record, { accountLicenseKey: license.key, accountLicenseSequence: 1, accountLicensePeriodMonths: validityMonths });
+    audit(user.id, 'SUPER_ADMIN_CREATED', 'user', record.id, { superAdminCode: record.superAdminCode, sellerLimit, validityMonths });
     return created(publicUser(record));
   },
   'PUT /api/owner/seller-limit': ({ body, user }) => {
@@ -118,6 +124,39 @@ const routes = {
     for (const request of store.passwordResetRequests.filter((item) => item.userId === account.id && item.status === 'PENDING')) { request.status = 'COMPLETED'; request.completedAt = new Date().toISOString(); request.completedBy = user.id; }
     audit(user.id, 'SUPER_ADMIN_PASSWORD_RESET', 'user', account.id);
     return ok({ changed: true, superAdminId: account.id, loginRequired: true });
+  },
+  'GET /api/account-validity': ({ user }) => ok(accountValidityForUser(user)),
+  'POST /api/license/renewal-request': ({ body, user }) => {
+    requireRole(user, 'SUPER_ADMIN');
+    const account = store.users.find((item) => item.id === user.id);
+    const validity = accountLicenseStatus(account);
+    const periodMonths = Number(body.periodMonths);
+    if (![6, 12].includes(periodMonths)) return fail(400, 'Select 6 Months or 1 Year validity');
+    if (!validity.renewalAvailable && validity.status === 'ACTIVE') return fail(409, 'Renewal request opens 15 days before expiry');
+    if (store.licenseRenewalRequests.some((item) => item.superAdminId === user.id && item.status === 'PENDING')) return fail(409, 'A renewal request is already pending');
+    const request = createRecord('licenseRenewalRequests', { superAdminId: user.id, superAdminCode: account.superAdminCode, requestedMonths: periodMonths, status: 'PENDING' });
+    audit(user.id, 'ACCOUNT_LICENSE_RENEWAL_REQUESTED', 'licenseRenewal', request.id, { periodMonths });
+    return created(request);
+  },
+  'GET /api/owner/renewals': ({ user }) => {
+    requireRole(user, 'OWNER');
+    return ok([...store.licenseRenewalRequests].reverse().map((item) => ({ ...item, superAdminName: store.users.find((account) => account.id === item.superAdminId)?.name ?? item.superAdminId })));
+  },
+  'POST /api/owner/renewals/approve': ({ body, user }) => {
+    requireRole(user, 'OWNER');
+    requireOwnerPassword(body, user);
+    const request = store.licenseRenewalRequests.find((item) => item.id === body.requestId && item.status === 'PENDING');
+    if (!request) return fail(404, 'Pending renewal request not found');
+    const account = store.users.find((item) => item.id === request.superAdminId && item.role === 'SUPER_ADMIN');
+    if (!account) return fail(404, 'Super Admin not found');
+    const current = accountLicenseStatus(account);
+    const startsAt = current.status === 'ACTIVE' ? current.endsAt : new Date().toISOString();
+    const sequence = Number(account.accountLicenseSequence ?? 0) + 1;
+    const license = issueAccountLicense({ accountId: account.id, periodMonths: request.requestedMonths, sequence, startsAt });
+    Object.assign(account, { accountLicenseKey: license.key, accountLicenseSequence: sequence, accountLicensePeriodMonths: request.requestedMonths });
+    Object.assign(request, { status: 'APPROVED', approvedAt: new Date().toISOString(), approvedBy: user.id, licenseSequence: sequence });
+    audit(user.id, 'ACCOUNT_LICENSE_RENEWAL_APPROVED', 'licenseRenewal', request.id, { superAdminId: account.id, periodMonths: request.requestedMonths, sequence });
+    return ok({ request, accountValidity: accountLicenseStatus(account), licenseKey: license.key });
   },
   'GET /api/settings': ({ user }) => ok(user.role === 'SUPER_ADMIN' ? store.settings : { schemes: visibleSchemes(user), schemeRates: assignedSchemeRates(user), pricing: visiblePricing(user.role) }),
   'PUT /api/settings': ({ body, user }) => {
@@ -243,6 +282,7 @@ const routes = {
   'GET /api/users': ({ user }) => ok(visibleUsers(user).map((item) => ({ ...publicUser(item), passwordResetPending: store.passwordResetRequests.some((request) => request.userId === item.id && request.status === 'PENDING') }))),
   'POST /api/users': ({ body, user }) => {
     if (user.role !== 'SUPER_ADMIN' || body.role !== 'SELLER') return fail(403, 'NGS allows Direct Seller accounts only');
+    requireAccountOperational(user);
     requireActionPassword(body, user, 'management');
     if (!body.name?.trim() || !/^\d{10,15}$/.test(String(body.phone))) return fail(400, 'Valid name and phone are required');
     if (store.users.some((item) => item.phone === String(body.phone))) return fail(409, 'Phone number already exists');
@@ -406,6 +446,7 @@ const routes = {
   'POST /api/tickets': ({ body, user }) => {
     requireOperationalLicense();
     requireRole(user, 'SELLER');
+    requireAccountOperational(user);
     const values = validateTicket(body, user);
     const expanded = expandBoxTicket(values, body.boxEntry).flatMap(expandAllSchemeTicket);
     if (expanded.length > 100) return fail(400, 'A sale can contain maximum 100 expanded entries');
@@ -418,6 +459,7 @@ const routes = {
   'POST /api/tickets/batch': ({ body, user }) => {
     requireOperationalLicense();
     requireRole(user, 'SELLER');
+    requireAccountOperational(user);
     if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 100) return fail(400, 'Bill must contain between 1 and 100 items');
     if (new Set(body.items.map((item) => item.boardId)).size !== 1) return fail(400, 'A bill can contain tickets from only one Lot Code');
     if (new Set(body.items.map((item) => item.showId ?? '')).size !== 1) return fail(400, 'A bill can contain tickets from only one Show');
@@ -454,6 +496,7 @@ const routes = {
   'POST /api/draws': ({ body, user }) => {
     requireOperationalLicense();
     requireRole(user, 'SUPER_ADMIN');
+    requireAccountOperational(user);
     requireActionPassword(body, user, 'result');
     if (!/^\d{4}$/.test(String(body.winningNumber))) return fail(400, 'Winning number must contain four digits');
     const scope = validateResultScope(body);
@@ -727,13 +770,16 @@ function reportMatchesResultScope(report, scope) {
   return report.boardId === scope.boardId && report.showId === scope.showId && report.businessDate === scope.resultDate;
 }
 function visibleSaleReports(user) {
+  if (user.role === 'OWNER') return store.saleReports;
   if (user.role === 'SUPER_ADMIN') { const sellerIds = new Set(descendantsOf(user.id).filter((item) => item.role === 'SELLER').map((item) => item.id)); return store.saleReports.filter((item) => sellerIds.has(item.sellerId)); }
   if (user.role === 'SELLER') return store.saleReports.filter((item) => item.sellerId === user.id);
   return [];
 }
 function reportSummary(report) {
   const entries = store.tickets.filter((item) => item.reportId === report.id);
-  return { ...report, entryCount: entries.length, totalQuantity: entries.reduce((sum, item) => sum + item.quantity, 0), totalSales: entries.reduce((sum, item) => sum + item.total, 0), totalPrize: entries.reduce((sum, item) => sum + item.prize, 0) };
+  const seller = store.users.find((item) => item.id === report.sellerId);
+  const superAdmin = seller ? store.users.find((item) => item.id === seller.parentId && item.role === 'SUPER_ADMIN') : null;
+  return { ...report, superAdminId: superAdmin?.id ?? null, superAdminName: superAdmin?.name ?? '—', entryCount: entries.length, totalQuantity: entries.reduce((sum, item) => sum + item.quantity, 0), totalSales: entries.reduce((sum, item) => sum + item.total, 0), totalPrize: entries.reduce((sum, item) => sum + item.prize, 0) };
 }
 function buildSaleReport(report) {
   const seller = store.users.find((item) => item.id === report.sellerId);
@@ -926,6 +972,8 @@ function buildDashboard(user) {
   const bonus = calculateBonus(sales, profits[key] ?? 0, rule ?? {});
   return {
     role: user.role, quantity, sales, prizes, grossProfit: profits[key] ?? 0, bonus,
+    accountValidity: accountValidityForUser(user),
+    accountRenewal: user.role === 'SUPER_ADMIN' ? [...store.licenseRenewalRequests].reverse().find((item) => item.superAdminId === user.id) ?? null : undefined,
     latestDraw: latestVisibleDraw(user),
     minimumProfit: store.settings.minimumProfit,
     customerRate: user.role === 'SELLER' ? store.settings.pricing.customerRate : undefined,
@@ -1106,6 +1154,26 @@ function visiblePricing(role) {
   return { sellerRate: p.sellerRate, customerRate: p.customerRate };
 }
 function requireRole(user, role) { if (user.role !== role) { const error = new Error('Permission denied'); error.status = 403; throw error; } }
+function ensureSuperAdminLicenses() {
+  for (const account of store.users.filter((item) => item.role === 'SUPER_ADMIN')) {
+    if (account.accountLicenseKey) continue;
+    const periodMonths = [6, 12].includes(Number(account.accountLicensePeriodMonths)) ? Number(account.accountLicensePeriodMonths) : 12;
+    const license = issueAccountLicense({ accountId: account.id, periodMonths, sequence: 1, startsAt: account.createdAt ?? new Date() });
+    Object.assign(account, { accountLicenseKey: license.key, accountLicenseSequence: 1, accountLicensePeriodMonths: periodMonths });
+  }
+}
+function accountValidityForUser(user) {
+  let account = store.users.find((item) => item.id === user.id);
+  while (account && account.role !== 'SUPER_ADMIN') account = store.users.find((item) => item.id === account.parentId);
+  return account ? accountLicenseStatus(account) : { status: 'OWNER', canOperate: true, daysRemaining: 0, graceDaysRemaining: 0 };
+}
+function requireAccountOperational(user) {
+  const validity = accountValidityForUser(user);
+  if (validity.canOperate) return validity;
+  const error = new Error(validity.status === 'INVALID' ? 'Account license key is invalid' : 'Account validity and grace period have expired. Renewal approval is required.');
+  error.status = 402;
+  throw error;
+}
 function activeSellerCount(superAdminId) { return store.users.filter((item) => item.role === 'SELLER' && item.parentId === superAdminId && item.isActive).length; }
 function ownerFinancialSummary(superAdminId) {
   const sellerIds = new Set(store.users.filter((item) => item.role === 'SELLER' && item.parentId === superAdminId).map((item) => item.id));

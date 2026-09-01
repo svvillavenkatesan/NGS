@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 
 process.env.NODE_ENV = 'test';
 const { server } = await import('../src/server.js');
+const { store } = await import('../src/store.js');
+const { issueAccountLicense } = await import('../src/account-license.js');
 
 test('NGS direct Seller workflow', async (context) => {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -48,8 +50,8 @@ test('NGS direct Seller workflow', async (context) => {
   assert.equal(primaryAdminReport.totalSellersCreated, 2);
   assert.equal(typeof primaryAdminReport.financials.today.netProfit, 'number');
   assert.deepEqual(Object.keys(primaryAdminReport.financials).sort(), ['month', 'periods', 'today', 'week']);
-  const newAdminOne = await json('/api/owner/super-admin', owner, { method: 'POST', body: JSON.stringify({ name: 'Branch Admin One', phone: '9777777771', password: 'Branch@123', sellerLimit: 1, ownerPassword: 'Owner@123' }) });
-  const newAdminTwo = await json('/api/owner/super-admin', owner, { method: 'POST', body: JSON.stringify({ name: 'Branch Admin Two', phone: '9777777772', password: 'Branch@124', sellerLimit: 5, ownerPassword: 'Owner@123' }) });
+  const newAdminOne = await json('/api/owner/super-admin', owner, { method: 'POST', body: JSON.stringify({ name: 'Branch Admin One', phone: '9777777771', password: 'Branch@123', sellerLimit: 1, validityMonths: 6, ownerPassword: 'Owner@123' }) });
+  const newAdminTwo = await json('/api/owner/super-admin', owner, { method: 'POST', body: JSON.stringify({ name: 'Branch Admin Two', phone: '9777777772', password: 'Branch@124', sellerLimit: 5, validityMonths: 12, ownerPassword: 'Owner@123' }) });
   assert.equal(newAdminOne.response.status, 201);
   assert.equal(newAdminTwo.response.status, 201);
   assert.match(newAdminOne.data.superAdminCode, /^\d{8}$/);
@@ -120,4 +122,15 @@ test('NGS direct Seller workflow', async (context) => {
   const resetAdmin = await json('/api/owner/super-admin-password-reset', owner, { method: 'PUT', body: JSON.stringify({ superAdminId: newAdminTwo.data.id, newPassword: 'Reset@124', ownerPassword: 'Owner@123' }) });
   assert.equal(resetAdmin.response.status, 200);
   await login('9777777772', 'Reset@124');
+
+  const renewalAccount = store.users.find((item) => item.id === newAdminOne.data.id);
+  const renewalStart = new Date(); renewalStart.setUTCMonth(renewalStart.getUTCMonth() - 6); renewalStart.setUTCDate(renewalStart.getUTCDate() + 10);
+  const expiringLicense = issueAccountLicense({ accountId: renewalAccount.id, periodMonths: 6, sequence: 1, startsAt: renewalStart });
+  renewalAccount.accountLicenseKey = expiringLicense.key; renewalAccount.accountLicenseSequence = 1;
+  const renewalRequest = await json('/api/license/renewal-request', branchAdmin, { method: 'POST', body: JSON.stringify({ periodMonths: 12 }) });
+  assert.equal(renewalRequest.response.status, 201);
+  const approvedRenewal = await json('/api/owner/renewals/approve', owner, { method: 'POST', body: JSON.stringify({ requestId: renewalRequest.data.id, ownerPassword: 'Owner@123' }) });
+  assert.equal(approvedRenewal.response.status, 200);
+  assert.equal(approvedRenewal.data.accountValidity.status, 'ACTIVE');
+  assert.equal(approvedRenewal.data.accountValidity.sequence, 2);
 });

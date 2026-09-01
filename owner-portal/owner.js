@@ -12,7 +12,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character
 const money = (value) => `₹${Number(value ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
 function loginScreen(message = '') {
-  app.innerHTML = `<section class="login card"><div class="compact-panel-title"><strong>System Owner</strong></div><h1>Login</h1><form id="owner-login"><label>Phone<input name="phone" inputmode="numeric" required></label><label>PWD<input name="password" type="password" required></label><button>Sign in</button><button type="button" class="secondary" id="owner-forgot-password">Forgot Password</button><p class="error">${escapeHtml(message)}</p></form></section>`;
+  app.innerHTML = `<section class="login card"><div class="compact-panel-title"><strong>System Owner</strong></div><h1>Login</h1><form id="owner-login"><label>Phone<input name="phone" inputmode="numeric" required></label><label>PWD<input name="password" type="password" required></label><button>Sign in</button><button type="button" class="secondary" id="owner-forgot-password">Forgot PWD</button><p class="error">${escapeHtml(message)}</p></form></section>`;
   document.querySelector('#owner-login').addEventListener('submit', login);
   document.querySelector('#owner-forgot-password').addEventListener('click', requestOwnerPasswordReset);
 }
@@ -39,14 +39,42 @@ function adminCard(item) {
   return `<article class="card wide"><h2>${escapeHtml(item.superAdminCode)} · ${escapeHtml(item.name)}</h2><p class="muted">Phone: ${escapeHtml(item.phone)} · Created: ${created} · ${item.isActive ? 'Active' : 'Disabled'}</p><p><strong>Seller IDs: ${item.totalSellersCreated}</strong> · Active ${item.currentSellers} · Limit ${item.sellerLimit} · Remaining ${item.remaining}</p><div class="table-wrap"><table><thead><tr><th>Period</th><th>Entries</th><th>Qty</th><th>Sales</th><th>Prize</th><th>Bonus</th><th>Profit / Loss</th></tr></thead><tbody>${rows}</tbody></table></div><p class="muted">Today ${item.financials.periods.today} · Week ${item.financials.periods.weekStart} to ${item.financials.periods.weekEnd} · Month ${item.financials.periods.month}</p><form class="admin-limit-form"><input name="superAdminId" type="hidden" value="${escapeHtml(item.id)}"><label>Seller Limit<input name="sellerLimit" type="number" min="${item.currentSellers}" max="100000" value="${item.sellerLimit}" required></label><label>Owner PWD<input name="ownerPassword" type="password" required></label><button>Update Limit</button></form><form class="admin-password-reset-form"><input name="superAdminId" type="hidden" value="${escapeHtml(item.id)}"><label>New PWD<input name="newPassword" type="password" minlength="8" required></label><label>Owner PWD<input name="ownerPassword" type="password" required></label><button>Reset Super Admin PWD</button></form></article>`;
 }
 
+function validityBadge(item) {
+  const validity = item.accountValidity ?? {};
+  const end = validity.endsAt ? new Date(validity.endsAt).toLocaleDateString('en-IN') : '—';
+  const grace = validity.graceEndsAt ? new Date(validity.graceEndsAt).toLocaleDateString('en-IN') : '—';
+  return `<div class="metrics owner-validity"><div><span>Validity</span><strong>${escapeHtml(validity.status ?? '—')}</strong></div><div><span>Period</span><strong>${Number(validity.periodMonths ?? item.accountLicensePeriodMonths ?? 0)} Months</strong></div><div><span>Valid Until</span><strong>${end}</strong></div><div><span>Grace Until</span><strong>${grace}</strong></div><div><span>Key Sequence</span><strong>${Number(validity.sequence ?? item.accountLicenseSequence ?? 0)}</strong></div></div>`;
+}
+
+function renewalsPanel(renewals = []) {
+  const rows = renewals.map((item) => `<tr><td>${escapeHtml(item.superAdminCode)}</td><td>${escapeHtml(item.superAdminName)}</td><td>${item.requestedMonths === 6 ? '6 Months' : '1 Year'}</td><td><span class="status ${item.status === 'APPROVED' ? 'profit' : 'break_even'}">${escapeHtml(item.status)}</span></td><td>${item.status === 'PENDING' ? `<form class="renewal-approve-form"><input type="hidden" name="requestId" value="${escapeHtml(item.id)}"><input name="ownerPassword" type="password" placeholder="Owner PWD" required><button>Approve & Generate Key</button></form>` : `Key ${Number(item.licenseSequence ?? 0)}`}</td></tr>`).join('');
+  return `<section class="card wide"><h2>Validity Renewals</h2>${rows ? `<table><thead><tr><th>Admin ID</th><th>Name</th><th>Period</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table>` : '<p>No renewal requests.</p>'}</section>`;
+}
+
+function ownerReportsPanel(reports = []) {
+  const rows = reports.map((report) => `<tr><td>${escapeHtml(report.businessDate)}</td><td>${escapeHtml(report.superAdminName)}</td><td>${escapeHtml(report.sellerName)}</td><td>${escapeHtml(report.boardCode)} · ${escapeHtml(report.showLabel)}</td><td>${report.entryCount} / ${report.totalQuantity}</td><td>${money(report.totalSales)}</td><td>${money(report.totalPrize)}</td><td><button type="button" class="secondary owner-view-report" data-report-id="${escapeHtml(report.id)}">View</button></td></tr>`).join('');
+  return `<section class="card wide"><h2>Detailed Reports</h2><form id="owner-report-filter" class="catalog-form"><label>Date<input name="date" type="date"></label><label>Super Admin<select name="admin"><option value="">All</option>${[...new Set(reports.map((item) => item.superAdminName))].map((name) => `<option>${escapeHtml(name)}</option>`).join('')}</select></label><label>Seller<select name="seller"><option value="">All</option>${[...new Set(reports.map((item) => item.sellerName))].map((name) => `<option>${escapeHtml(name)}</option>`).join('')}</select></label></form><div class="table-wrap"><table id="owner-report-table"><thead><tr><th>Date</th><th>Super Admin</th><th>Seller</th><th>Lot / Show</th><th>Entries / Qty</th><th>Sales</th><th>Prize</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="8">No reports.</td></tr>'}</tbody></table></div><div id="owner-report-detail"></div></section>`;
+}
+
+function ownerReportDetail(report) {
+  const rows = report.entries.map((entry) => `<tr><td>${entry.sequence}</td><td>${escapeHtml(entry.billNumber)}</td><td>${escapeHtml(entry.time)}</td><td>${escapeHtml(entry.scheme)}</td><td>${escapeHtml(entry.enteredNumber)}</td><td>${entry.quantity}</td><td>${money(entry.saleAmount)}</td><td>${money(entry.prizeAmount)}</td><td>${escapeHtml(entry.matchRule ?? '—')}</td><td>${money(entry.bonusAmount)}</td><td>${money(entry.netAmount)}</td></tr>`).join('');
+  return `<article class="report-sheet"><div class="report-header"><h2>${escapeHtml(report.reportId)}</h2><button type="button" id="owner-print-report">Print A4 Landscape</button></div><div class="report-meta"><div><span>Super Admin</span><strong>${escapeHtml(report.superAdminName)}</strong></div><div><span>Seller</span><strong>${escapeHtml(report.seller.name)}</strong></div><div><span>Lot / Show</span><strong>${escapeHtml(report.boardCode)} / ${escapeHtml(report.showLabel)}</strong></div><div><span>Date</span><strong>${escapeHtml(report.businessDate)}</strong></div><div><span>Result</span><strong>${escapeHtml(report.winningNumber ?? '—')}</strong></div><div><span>Status</span><strong>${escapeHtml(report.status)}</strong></div></div><div class="table-wrap"><table><thead><tr><th>Sl.</th><th>Bill</th><th>Time</th><th>Scheme</th><th>Number</th><th>Qty</th><th>Sold</th><th>Prize</th><th>Reason</th><th>Bonus</th><th>Net</th></tr></thead><tbody>${rows}</tbody></table></div></article>`;
+}
+
 async function render(message = '') {
   try {
-    const data = await request('/api/owner/control');
+    const [data, renewals, reports] = await Promise.all([request('/api/owner/control'), request('/api/owner/renewals'), request('/api/reports/sales')]);
     app.innerHTML = `<div class="compact-panel-title"><strong>NGS · SYSTEM OWNER</strong></div><section class="grid"><article class="card"><span class="muted">Super Admins</span><strong>${data.totalSuperAdmins}</strong></article><article class="card"><span class="muted">Active Sellers</span><strong>${data.currentSellers}</strong></article><article class="card"><span class="muted">Total Capacity</span><strong>${data.totalCapacity}</strong></article></section><section class="grid"><article class="card wide"><h2>Create Super Admin</h2><form id="create-admin-form"><label>Name<input name="name" maxlength="60" required></label><label>Phone / User ID<input name="phone" inputmode="numeric" pattern="[0-9]{10,15}" required></label><label>Temporary PWD<input name="password" type="password" minlength="8" required></label><label>Seller Limit<input name="sellerLimit" type="number" min="1" max="100000" value="100" required></label><label>Owner PWD<input name="ownerPassword" type="password" required></label><button>Create Super Admin</button></form></article><article class="card wide"><h2>Change Owner PWD</h2><form id="owner-password-form"><label>Current PWD<input name="currentPassword" type="password" required></label><label>New PWD<input name="newPassword" type="password" minlength="8" required></label><button>Change PWD</button></form></article></section><h2>Super Admin Accounts</h2><section class="grid">${data.superAdmins.map(adminCard).join('') || '<p>No Super Admin accounts.</p>'}</section><p id="owner-message" class="notice">${escapeHtml(message)}</p><button id="owner-exit" class="secondary">Exit</button>`;
     document.querySelector('#create-admin-form').addEventListener('submit', createAdmin);
+    document.querySelector('#create-admin-form [name="sellerLimit"]').closest('label').insertAdjacentHTML('afterend', '<label>Validity<select name="validityMonths"><option value="6">6 Months</option><option value="12">1 Year</option></select></label>');
+    document.querySelectorAll('.admin-limit-form').forEach((form, index) => form.closest('.card').querySelector('h2').insertAdjacentHTML('afterend', validityBadge(data.superAdmins[index])));
+    document.querySelector('#owner-message').insertAdjacentHTML('beforebegin', `${renewalsPanel(renewals)}${ownerReportsPanel(reports)}`);
     document.querySelectorAll('.admin-limit-form').forEach((form) => form.addEventListener('submit', saveLimit));
     document.querySelectorAll('.admin-password-reset-form').forEach((form) => form.addEventListener('submit', resetAdminPassword));
     document.querySelector('#owner-password-form').addEventListener('submit', changeOwnerPassword);
+    document.querySelectorAll('.renewal-approve-form').forEach((form) => form.addEventListener('submit', approveRenewal));
+    document.querySelectorAll('.owner-view-report').forEach((button) => button.addEventListener('click', () => viewOwnerReport(button.dataset.reportId)));
+    document.querySelector('#owner-report-filter').addEventListener('change', filterOwnerReports);
     document.querySelector('#owner-exit').addEventListener('click', () => { sessionStorage.removeItem('token:OWNER'); token = null; loginScreen(); });
   } catch (error) { sessionStorage.removeItem('token:OWNER'); token = null; loginScreen(error.message); }
 }
@@ -73,6 +101,35 @@ async function changeOwnerPassword(event) {
   event.preventDefault();
   try { await request('/api/me/password', { method: 'PUT', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); sessionStorage.removeItem('token:OWNER'); token = null; loginScreen('PWD changed. Sign in again.'); }
   catch (error) { showMessage(error.message, true); }
+}
+
+async function approveRenewal(event) {
+  event.preventDefault();
+  try {
+    const result = await request('/api/owner/renewals/approve', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) });
+    await render(`Renewal approved. Signed Key ${result.licenseKey}`);
+  } catch (error) { showMessage(error.message, true); }
+}
+
+async function viewOwnerReport(reportId) {
+  try {
+    const report = await request(`/api/reports/sale?reportId=${encodeURIComponent(reportId)}`);
+    document.querySelector('#owner-report-detail').innerHTML = ownerReportDetail(report);
+    document.querySelector('#owner-print-report').addEventListener('click', () => {
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`<html><head><title>${escapeHtml(report.reportId)}</title><link rel="stylesheet" href="/web-shared/styles.css?v=20260901-4"></head><body><main>${ownerReportDetail(report)}</main><script>onload=()=>print()</script></body></html>`);
+      printWindow.document.close();
+    });
+  } catch (error) { showMessage(error.message, true); }
+}
+
+function filterOwnerReports(event) {
+  const values = Object.fromEntries(new FormData(event.currentTarget));
+  document.querySelectorAll('#owner-report-table tbody tr').forEach((row) => {
+    const cells = row.querySelectorAll('td');
+    if (cells.length < 3) return;
+    row.hidden = Boolean((values.date && cells[0].textContent !== values.date) || (values.admin && cells[1].textContent !== values.admin) || (values.seller && cells[2].textContent !== values.seller));
+  });
 }
 
 function showMessage(message, isError = false) {

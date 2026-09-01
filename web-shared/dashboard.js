@@ -76,7 +76,7 @@ async function renderDashboard() {
   const roleLabel = expectedRole.replaceAll('_', ' ');
   document.querySelector('main').innerHTML = `
     ${expectedRole === 'DISTRIBUTOR' ? `<div class="title-row"><div><p class="muted">${roleLabel} CONTROL CENTER</p><h1>Welcome, ${escapeHtml(currentUser.name)}</h1></div><button class="secondary" id="logout">Sign out</button></div>` : ''}
-    ${expectedRole === 'SUPER_ADMIN' ? '<div class="compact-panel-title"><strong>NGS · SUPER ADMIN PANEL</strong></div><nav class="panel-tabs"><button type="button" class="active" data-panel-tab="overview">Dashboard</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="weekly-accounts">Weekly Accounts</button><button type="button" data-panel-tab="results">Results</button><button type="button" data-panel-tab="direct-sellers">Direct Sellers</button><button type="button" data-panel-tab="schemes">Schemes</button><button type="button" data-panel-tab="lot-codes">Lot Codes</button><button type="button" data-panel-tab="security">Security</button><button type="button" data-panel-tab="license">License</button><button type="button" class="seller-exit" id="logout">Exit</button></nav>' : ''}
+    ${expectedRole === 'SUPER_ADMIN' ? '<div class="compact-panel-title"><strong>NGS · SUPER ADMIN PANEL</strong></div><nav class="panel-tabs"><button type="button" class="active" data-panel-tab="overview">Dashboard</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="weekly-accounts">Accounts</button><button type="button" data-panel-tab="results">Results</button><button type="button" data-panel-tab="direct-sellers">Sellers</button><button type="button" data-panel-tab="schemes">Schemes</button><button type="button" data-panel-tab="lot-codes">Lot Codes</button><button type="button" data-panel-tab="security">Security</button><button type="button" data-panel-tab="validity">Validity</button><button type="button" class="seller-exit" id="logout">Exit</button></nav>' : ''}
     ${expectedRole === 'DISTRIBUTOR' ? '<nav class="panel-tabs"><button type="button" class="active" data-panel-tab="overview">Overview</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="accounts">Weekly Accounts</button><button type="button" data-panel-tab="sales">Sales</button><button type="button" data-panel-tab="network">Network</button><button type="button" data-panel-tab="schemes">Schemes</button><button type="button" data-panel-tab="results">Results</button></nav>' : ''}
     ${expectedRole === 'SELLER' ? '<nav class="panel-tabs seller-tabs"><button type="button" class="active" data-panel-tab="entry">Entry</button><button type="button" data-panel-tab="results">Results</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="sales">Sales</button><button type="button" data-panel-tab="account">My Account</button><button type="button" class="seller-exit" id="logout">Exit</button></nav>' : ''}
     ${expectedRole !== 'SELLER' ? `<section class="grid">
@@ -93,7 +93,7 @@ async function renderDashboard() {
       ${schemeCatalogPanel(dashboard.schemeCatalog)}
       ${lotCodePanel(dashboard.boards, dashboard.schemeCatalog)}
       ${securityPanel(dashboard.actionSecurity)}
-      ${licensePanel(dashboard.license)}
+      ${validityPanel(dashboard.accountValidity, dashboard.accountRenewal)}
     ` : expectedRole === 'DISTRIBUTOR' ? distributorControlCenter(dashboard, users, reports) : sellerControlCenter(dashboard, users, reports)}
     <p id="message" class="notice"></p>`;
   usePwdLabels(document.querySelector('main'));
@@ -104,6 +104,7 @@ async function renderDashboard() {
 }
 
 function actionPanel(dashboard) {
+  if (!dashboard.accountValidity?.canOperate) return `<article class="card wide"><h2>Account Blocked</h2><p class="error">Validity and grace period expired. Owner renewal approval is required.</p></article>`;
   if (expectedRole === 'SELLER') {
     const schemeOptions = sellerSchemeOptions(dashboard.assignedSchemeRates);
     return `<article class="card seller-entry-card" id="sale-card"><div class="entry-clock"><div class="entry-now"><strong id="entry-date">--</strong><strong id="entry-time">--</strong></div><div class="entry-closing"><span id="entry-countdown-label">Entry closes in</span><strong id="entry-countdown">--:--:--</strong><small id="entry-show"></small></div></div>${schemeOptions ? `<form id="ticket-form" class="seller-entry-form" data-unit-price="${dashboard.customerRate}">
@@ -363,9 +364,11 @@ function securityPanel(security = {}) {
   return `<section class="workspace hidden" data-panel="security"><article class="card wide"><p class="muted">ACTION PASSWORD SECURITY</p><h2>Result and Management passwords</h2><p class="muted">Result: ${security.resultPasswordConfigured ? 'Separate password configured' : 'Uses Super Admin password'} · Management: ${security.managementPasswordConfigured ? 'Separate password configured' : 'Uses Super Admin password'}</p><form id="security-password-form" class="catalog-form"><label>Current Super Admin Password<input name="currentPassword" type="password" autocomplete="current-password" required></label><label>New Result Password<input name="resultPassword" type="password" minlength="8" autocomplete="new-password" required></label><label>New Management Password<input name="managementPassword" type="password" minlength="8" autocomplete="new-password" required></label><button>Save security passwords</button></form><p class="muted">Published Results cannot be edited or deleted.</p></article>${changePasswordPanel()}</section>`;
 }
 
-function licensePanel(license = {}) {
-  const label = { TRIAL: '7 Day Trial', ACTIVE: 'Active', EXPIRED: 'Expired', SUSPENDED: 'Suspended' }[license.status] ?? license.status;
-  return `<section class="workspace hidden" data-panel="license"><article class="card wide"><p class="muted">SOFTWARE LICENSE</p><h2>${escapeHtml(label || 'Unknown')}</h2><div class="metrics"><div><span>Status</span><strong>${escapeHtml(license.status || 'Unknown')}</strong></div><div><span>Days remaining</span><strong>${Number(license.daysRemaining || 0)}</strong></div><div><span>Trial ends</span><strong>${license.trialEndsAt ? new Date(license.trialEndsAt).toLocaleString() : '—'}</strong></div></div><p class="muted">Device ID</p><strong>${escapeHtml(license.deviceId || '—')}</strong>${license.canOperate ? '<p class="muted">Ticket Entry and Result Publish are enabled.</p>' : '<p class="error">Ticket Entry and Result Publish are locked. Contact the software administrator.</p>'}</article></section>`;
+function validityPanel(validity = {}, renewal = null) {
+  const end = validity.endsAt ? new Date(validity.endsAt).toLocaleDateString('en-IN') : '—';
+  const graceEnd = validity.graceEndsAt ? new Date(validity.graceEndsAt).toLocaleDateString('en-IN') : '—';
+  const requestState = renewal ? `<span class="status ${renewal.status === 'APPROVED' ? 'profit' : 'break_even'}">${escapeHtml(renewal.status)}</span>` : '—';
+  return `<section class="workspace hidden" data-panel="validity"><article class="card wide"><h2>Account Validity</h2><div class="metrics"><div><span>Status</span><strong>${escapeHtml(validity.status ?? '—')}</strong></div><div><span>Valid Until</span><strong>${end}</strong></div><div><span>Days Left</span><strong>${Number(validity.daysRemaining ?? 0)}</strong></div><div><span>Grace Until</span><strong>${graceEnd}</strong></div><div><span>Grace Days</span><strong>${Number(validity.graceDaysRemaining ?? 0)}</strong></div><div><span>Renewal</span><strong>${requestState}</strong></div></div>${validity.renewalAvailable && renewal?.status !== 'PENDING' ? `<form id="renewal-request-form" class="inline-form"><label>Validity<select name="periodMonths"><option value="6">6 Months</option><option value="12">1 Year</option></select></label><button>Request Renewal</button></form>` : ''}${!validity.canOperate ? '<p class="error">Entry and Result Publish are blocked until Owner approval.</p>' : ''}</article></section>`;
 }
 function scheduleRow(id, label, start, end) {
   return `<div class="schedule-row" data-schedule-row="${id}"><label class="check"><input type="checkbox" name="schedule_${id}"> ${label}</label><label>Start<input type="time" name="start_${id}" value="${start}"></label><label>End<input type="time" name="end_${id}" value="${end}"></label></div>`;
@@ -375,7 +378,8 @@ function prizeGroup(title, schemes, values) {
 }
 function reportsWorkspace(reports = []) {
   const rows = reports.slice(0, 100);
-  return `<section class="workspace hidden" data-panel="reports"><article class="card wide report-list-card"><div class="title-row compact"><div><p class="muted">IMMUTABLE SALES HISTORY</p><h2>Sale Reports</h2></div><div><button type="button" class="secondary view-sample-report">View Sample Report</button> <span class="status profit">DELETE LOCKED</span></div></div><p class="muted">Each Seller + Lot Code + Show + Date has a separate Report ID. The latest report appears first.</p>${rows.length ? `<table class="report-list"><thead><tr><th>Report ID</th><th>Date / Show</th><th>Seller</th><th>Distributor</th><th>Entries</th><th>Sales</th><th>Prize</th><th>Status</th><th></th></tr></thead><tbody>${rows.map((report) => `<tr><td><strong class="report-code">${escapeHtml(report.reportId)}</strong></td><td>${escapeHtml(report.businessDate)}<br><span class="muted">${escapeHtml(report.boardCode)} · ${escapeHtml(report.showLabel)}</span></td><td>${escapeHtml(report.sellerName)}</td><td>${escapeHtml(report.distributorName)}</td><td>${report.entryCount} / ${report.totalQuantity}</td><td>${money(report.totalSales)}</td><td>${money(report.totalPrize)}</td><td><span class="status ${report.status === 'FINALIZED' ? 'profit' : 'break_even'}">${escapeHtml(report.status)}</span></td><td><button type="button" class="secondary view-report" data-report-id="${escapeHtml(report.id)}">View</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted">The report is created automatically after a sale is completed. You can view the Sample Report now.</p>'}</article><div id="report-detail" class="wide"></div></section>`;
+  const sellers = [...new Set(rows.map((item) => item.sellerName))];
+  return `<section class="workspace hidden" data-panel="reports"><article class="card wide report-list-card"><h2>Detailed Reports</h2><form id="report-filter" class="catalog-form"><label>Date<input name="date" type="date"></label><label>Seller<select name="seller"><option value="">All</option>${sellers.map((name) => `<option>${escapeHtml(name)}</option>`).join('')}</select></label><label>Lot Code<select name="lot"><option value="">All</option>${[...new Set(rows.map((item) => item.boardCode))].map((code) => `<option>${escapeHtml(code)}</option>`).join('')}</select></label><label>Show<select name="show"><option value="">All</option>${[...new Set(rows.map((item) => item.showLabel))].map((show) => `<option>${escapeHtml(show)}</option>`).join('')}</select></label></form>${rows.length ? `<table class="report-list"><thead><tr><th>Date</th><th>Seller</th><th>Lot / Show</th><th>Entries / Qty</th><th>Sales</th><th>Prize</th><th>Status</th><th></th></tr></thead><tbody>${rows.map((report) => `<tr data-date="${escapeHtml(report.businessDate)}" data-seller="${escapeHtml(report.sellerName)}" data-lot="${escapeHtml(report.boardCode)}" data-show="${escapeHtml(report.showLabel)}"><td>${escapeHtml(report.businessDate)}</td><td>${escapeHtml(report.sellerName)}</td><td>${escapeHtml(report.boardCode)} · ${escapeHtml(report.showLabel)}</td><td>${report.entryCount} / ${report.totalQuantity}</td><td>${money(report.totalSales)}</td><td>${money(report.totalPrize)}</td><td><span class="status ${report.status === 'FINALIZED' ? 'profit' : 'break_even'}">${escapeHtml(report.status)}</span></td><td><button type="button" class="secondary view-report" data-report-id="${escapeHtml(report.id)}">View</button></td></tr>`).join('')}</tbody></table>` : '<p>No reports.</p>'}</article><div id="report-detail" class="wide"></div></section>`;
 }
 function sampleDetailedReport() {
   const base = { date: '27/08/2026', time: '10:25:14', billNumber: 'KL3-27-THU-0001', winningNumber: '0204', bonusPercentage: 10, corrected: false };
@@ -420,6 +424,10 @@ function wireReportActions() {
     document.querySelectorAll('[data-seller-report-tab]').forEach((item) => item.classList.toggle('active', item === button));
     document.querySelectorAll('[data-seller-report-panel]').forEach((panel) => panel.classList.toggle('hidden', panel.dataset.sellerReportPanel !== button.dataset.sellerReportTab));
   }));
+  document.querySelector('#report-filter')?.addEventListener('change', (event) => {
+    const values = Object.fromEntries(new FormData(event.currentTarget));
+    document.querySelectorAll('.report-list tbody tr').forEach((row) => { row.hidden = Boolean((values.date && row.dataset.date !== values.date) || (values.seller && row.dataset.seller !== values.seller) || (values.lot && row.dataset.lot !== values.lot) || (values.show && row.dataset.show !== values.show)); });
+  });
 }
 function wireActions() {
   document.querySelector('#result-form')?.addEventListener('submit', publishResult);
@@ -614,6 +622,11 @@ function wireActions() {
     try { await request('/api/users/password-reset', { method: 'PUT', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); notify('User password reset. Their old sessions are closed.'); event.currentTarget.reset(); }
     catch (error) { notify(error.message, true); }
   }));
+  document.querySelector('#renewal-request-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try { await request('/api/license/renewal-request', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); notify('Renewal request sent to Owner'); await renderDashboard(); switchPanel('validity'); }
+    catch (error) { notify(error.message, true); }
+  });
   document.querySelectorAll('[data-panel-tab]').forEach((button) => button.addEventListener('click', () => switchPanel(button.dataset.panelTab)));
   document.querySelectorAll('[data-ticket-filter]').forEach((button) => button.addEventListener('click', () => {
     const card = button.closest('.card');
