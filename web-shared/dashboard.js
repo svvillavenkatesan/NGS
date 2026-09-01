@@ -26,7 +26,8 @@ async function boot() {
 }
 
 function showLogin(error = '') {
-  document.querySelector('main').innerHTML = `<section class="login card"><p class="muted">Secure sign in</p><h1>Welcome back.</h1><form id="login-form" autocomplete="off">
+  const loginTitle = { SUPER_ADMIN: 'Super Admin', DISTRIBUTOR: 'Distributor', SUB_DISTRIBUTOR: 'Distributor', SELLER: 'Seller' }[expectedRole] ?? 'Account';
+  document.querySelector('main').innerHTML = `<section class="login card"><div class="compact-panel-title"><strong>${loginTitle}</strong></div><h1>Login</h1><form id="login-form" autocomplete="off">
     <label>Phone<input name="phone" inputmode="numeric" autocomplete="off" value="" required></label>
     <label>Password<input name="password" type="password" autocomplete="new-password" value="" required></label>
     <button>Sign in</button><p class="error">${error}</p></form></section>`;
