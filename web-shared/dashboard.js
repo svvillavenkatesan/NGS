@@ -30,8 +30,26 @@ function showLogin(error = '') {
   document.querySelector('main').innerHTML = `<section class="login card"><div class="compact-panel-title"><strong>${loginTitle}</strong></div><h1>Login</h1><form id="login-form" autocomplete="off">
     <label>Phone<input name="phone" inputmode="numeric" autocomplete="off" value="" required></label>
     <label>Password<input name="password" type="password" autocomplete="new-password" value="" required></label>
-    <button>Sign in</button><p class="error">${error}</p></form></section>`;
+    <button>Sign in</button><button type="button" class="secondary" id="forgot-password">Forgot Password</button><p class="error">${error}</p></form></section>`;
   document.querySelector('#login-form').addEventListener('submit', login);
+  document.querySelector('#forgot-password').addEventListener('click', requestPasswordReset);
+  usePwdLabels(document.querySelector('main'));
+}
+
+function usePwdLabels(root) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const node of nodes) node.nodeValue = node.nodeValue.replaceAll('Passwords', 'PWDs').replaceAll('Password', 'PWD').replaceAll('password', 'PWD');
+  root.querySelectorAll('[placeholder]').forEach((item) => { item.placeholder = item.placeholder.replaceAll('Password', 'PWD').replaceAll('password', 'PWD'); });
+}
+
+async function requestPasswordReset() {
+  const phone = document.querySelector('#login-form [name="phone"]').value.trim();
+  const message = document.querySelector('#login-form .error');
+  if (!phone) { message.textContent = 'Enter Phone / User ID first'; return; }
+  try { const result = await request('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ phone }) }); message.textContent = result.message; message.classList.remove('error'); }
+  catch (error) { message.textContent = error.message; }
 }
 
 async function login(event) {
@@ -78,6 +96,7 @@ async function renderDashboard() {
       ${licensePanel(dashboard.license)}
     ` : expectedRole === 'DISTRIBUTOR' ? distributorControlCenter(dashboard, users, reports) : sellerControlCenter(dashboard, users, reports)}
     <p id="message" class="notice"></p>`;
+  usePwdLabels(document.querySelector('main'));
   document.querySelector('#logout').onclick = () => { sessionStorage.removeItem(`token:${expectedRole}`); token = null; showLogin(); };
   wireActions();
   const events = new EventSource(`${api}/api/events?token=${encodeURIComponent(token)}`);
@@ -97,7 +116,7 @@ function actionPanel(dashboard) {
   </form>` : '<p class="error">No selling schemes are assigned to this account.</p>'}</article>`;
   }
   if (expectedRole === 'SUPER_ADMIN') return `
-    <article class="card" id="publish-card"><h2>Publish Result</h2><form id="result-form">${resultScopeFields(dashboard.boards, 'publish')}<label>Four-digit winning number (DABC)<input id="publish-number" name="winningNumber" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="5846" required></label><label class="check"><input name="overrideBelowTarget" type="checkbox"> Override minimum target</label><label>Override reason<input name="overrideReason"></label><label>Result Password<input name="actionPassword" type="password" autocomplete="off" required></label><button>Publish Result</button></form></article>
+    <article class="card" id="publish-card"><h2>Publish Result</h2><form id="result-form">${resultScopeFields(dashboard.boards, 'publish')}<label>Four-digit winning number (DABC)<input id="publish-number" name="winningNumber" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="5846" required></label><label class="check"><input name="overrideBelowTarget" type="checkbox"> Override minimum target</label><label>Override reason<input name="overrideReason"></label><label>Result PWD<input name="actionPassword" type="password" autocomplete="off" required></label><button>Publish Result</button></form></article>
     <article class="card"><h2>Result Preview</h2><form id="preview-form">${resultScopeFields(dashboard.boards, 'preview')}<label>Four-digit winning number<input name="winningNumber" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="5846" required></label><button>Calculate</button></form><div id="preview-result"></div></article>`;
   return `<article class="card"><h2>Add Seller</h2><p class="muted">There is no separate Sub-Distributor role. A Seller with a percentage receives commission.</p><form id="user-form"><input type="hidden" name="role" value="SELLER"><label>Seller name<input name="name" required></label><label>Phone<input name="phone" inputmode="numeric" pattern="[0-9]{10,15}" required></label><label>Temporary password<input name="password" type="password" minlength="8" required></label><label>Commission %<input name="commissionPercentage" type="number" min="0" max="50" step="0.01" value="0" required></label><button>Create Seller</button></form></article>`;
 }
@@ -186,7 +205,7 @@ function distributorPanel(lotCodes = [], catalog = [], users = [], bonusRules = 
       </fieldset>
       <fieldset class="scheme-rates"><legend>4D Scheme Selection</legend><p class="muted">Select the required 4D Schemes separately.</p><div class="subscheme-grid compact-scheme-grid">${catalog.filter((scheme) => !scheme.universal && scheme.pattern === 'DABC').map((scheme) => { const allowedLots = lotCodes.filter((lot) => lot.schemeIds?.includes(scheme.id)).map((lot) => lot.id).join(' '); return `<div class="subscheme catalog-rate" data-lot-ids="${escapeHtml(allowedLots)}"><label class="check"><input type="checkbox" name="catalog_scheme_${scheme.id}"> <span>${escapeHtml(scheme.name)}</span></label></div>`; }).join('')}</div></fieldset>
       <fieldset class="scheme-rates"><legend>Distributor grace time</legend><p class="muted">Optional extra minutes after each Show end time. Use 0 when no grace is required.</p><div class="grace-grid">${['show1', 'show2', 'show3', 'show4', 'show5'].map((id, index) => `<label>Show ${index + 1}<input type="text" inputmode="numeric" pattern="[0-9]{1,2}" name="grace_${id}" value="0" aria-label="Show ${index + 1} grace minutes"><span class="muted">minutes</span></label>`).join('')}</div></fieldset>
-      <label>Management Password<input name="actionPassword" type="password" autocomplete="off" required></label>
+      <label>Management PWD<input name="actionPassword" type="password" autocomplete="off" required></label>
       <button id="save-distributor">Add Distributor</button>
     </form></article>${distributorBonusPanel(users, bonusRules)}${usersPanel(users.filter((item) => item.role === 'DISTRIBUTOR'))}
   </section>`;

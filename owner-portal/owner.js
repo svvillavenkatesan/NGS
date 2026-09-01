@@ -12,8 +12,16 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character
 const money = (value) => `₹${Number(value ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
 function loginScreen(message = '') {
-  app.innerHTML = `<section class="login card"><p class="muted">OWNER SECURITY</p><h1>System Owner Login</h1><form id="owner-login"><label>Phone<input name="phone" inputmode="numeric" required></label><label>Password<input name="password" type="password" required></label><button>Sign in</button><p class="error">${escapeHtml(message)}</p></form></section>`;
+  app.innerHTML = `<section class="login card"><div class="compact-panel-title"><strong>System Owner</strong></div><h1>Login</h1><form id="owner-login"><label>Phone<input name="phone" inputmode="numeric" required></label><label>PWD<input name="password" type="password" required></label><button>Sign in</button><button type="button" class="secondary" id="owner-forgot-password">Forgot Password</button><p class="error">${escapeHtml(message)}</p></form></section>`;
   document.querySelector('#owner-login').addEventListener('submit', login);
+  document.querySelector('#owner-forgot-password').addEventListener('click', requestOwnerPasswordReset);
+}
+
+async function requestOwnerPasswordReset() {
+  const phone = document.querySelector('#owner-login [name="phone"]').value.trim();
+  if (!phone) return loginScreen('Enter Phone / User ID first');
+  try { const result = await request('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ phone }) }); loginScreen(result.message); }
+  catch (error) { loginScreen(error.message); }
 }
 
 async function login(event) {
@@ -28,15 +36,17 @@ async function login(event) {
 function adminCard(item) {
   const created = new Date(item.createdAt).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' });
   const rows = [['Today', item.financials.today], ['This Week', item.financials.week], ['This Month', item.financials.month]].map(([label, report]) => `<tr><td>${label}</td><td>${report.entries}</td><td>${report.quantity}</td><td>${money(report.sales)}</td><td>${money(report.prizes)}</td><td>${money(report.bonus)}</td><td class="${report.netProfit < 0 ? 'error' : ''}"><strong>${money(report.netProfit)}</strong></td></tr>`).join('');
-  return `<article class="card wide"><h2>${escapeHtml(item.superAdminCode)} · ${escapeHtml(item.name)}</h2><p class="muted">Phone: ${escapeHtml(item.phone)} · Created: ${created} · ${item.isActive ? 'Active' : 'Disabled'}</p><p><strong>Seller IDs: ${item.totalSellersCreated}</strong> · Active ${item.currentSellers} · Limit ${item.sellerLimit} · Remaining ${item.remaining}</p><div class="table-wrap"><table><thead><tr><th>Period</th><th>Entries</th><th>Qty</th><th>Sales</th><th>Prize</th><th>Bonus</th><th>Profit / Loss</th></tr></thead><tbody>${rows}</tbody></table></div><p class="muted">Today ${item.financials.periods.today} · Week ${item.financials.periods.weekStart} to ${item.financials.periods.weekEnd} · Month ${item.financials.periods.month}</p><form class="admin-limit-form"><input name="superAdminId" type="hidden" value="${escapeHtml(item.id)}"><label>Seller Limit<input name="sellerLimit" type="number" min="${item.currentSellers}" max="100000" value="${item.sellerLimit}" required></label><label>Owner Password<input name="ownerPassword" type="password" required></label><button>Update Limit</button></form></article>`;
+  return `<article class="card wide"><h2>${escapeHtml(item.superAdminCode)} · ${escapeHtml(item.name)}</h2><p class="muted">Phone: ${escapeHtml(item.phone)} · Created: ${created} · ${item.isActive ? 'Active' : 'Disabled'}</p><p><strong>Seller IDs: ${item.totalSellersCreated}</strong> · Active ${item.currentSellers} · Limit ${item.sellerLimit} · Remaining ${item.remaining}</p><div class="table-wrap"><table><thead><tr><th>Period</th><th>Entries</th><th>Qty</th><th>Sales</th><th>Prize</th><th>Bonus</th><th>Profit / Loss</th></tr></thead><tbody>${rows}</tbody></table></div><p class="muted">Today ${item.financials.periods.today} · Week ${item.financials.periods.weekStart} to ${item.financials.periods.weekEnd} · Month ${item.financials.periods.month}</p><form class="admin-limit-form"><input name="superAdminId" type="hidden" value="${escapeHtml(item.id)}"><label>Seller Limit<input name="sellerLimit" type="number" min="${item.currentSellers}" max="100000" value="${item.sellerLimit}" required></label><label>Owner PWD<input name="ownerPassword" type="password" required></label><button>Update Limit</button></form><form class="admin-password-reset-form"><input name="superAdminId" type="hidden" value="${escapeHtml(item.id)}"><label>New PWD<input name="newPassword" type="password" minlength="8" required></label><label>Owner PWD<input name="ownerPassword" type="password" required></label><button>Reset Super Admin PWD</button></form></article>`;
 }
 
 async function render(message = '') {
   try {
     const data = await request('/api/owner/control');
-    app.innerHTML = `<div class="compact-panel-title"><strong>NGS · SYSTEM OWNER</strong></div><section class="grid"><article class="card"><span class="muted">Super Admins</span><strong>${data.totalSuperAdmins}</strong></article><article class="card"><span class="muted">Active Sellers</span><strong>${data.currentSellers}</strong></article><article class="card"><span class="muted">Total Capacity</span><strong>${data.totalCapacity}</strong></article></section><section class="grid"><article class="card wide"><h2>Create Super Admin</h2><form id="create-admin-form"><label>Name<input name="name" maxlength="60" required></label><label>Phone / User ID<input name="phone" inputmode="numeric" pattern="[0-9]{10,15}" required></label><label>Temporary Password<input name="password" type="password" minlength="8" required></label><label>Seller Limit<input name="sellerLimit" type="number" min="1" max="100000" value="100" required></label><label>Owner Password<input name="ownerPassword" type="password" required></label><button>Create Super Admin</button></form></article></section><h2>Super Admin Accounts</h2><section class="grid">${data.superAdmins.map(adminCard).join('') || '<p>No Super Admin accounts.</p>'}</section><p id="owner-message" class="notice">${escapeHtml(message)}</p><button id="owner-exit" class="secondary">Exit</button>`;
+    app.innerHTML = `<div class="compact-panel-title"><strong>NGS · SYSTEM OWNER</strong></div><section class="grid"><article class="card"><span class="muted">Super Admins</span><strong>${data.totalSuperAdmins}</strong></article><article class="card"><span class="muted">Active Sellers</span><strong>${data.currentSellers}</strong></article><article class="card"><span class="muted">Total Capacity</span><strong>${data.totalCapacity}</strong></article></section><section class="grid"><article class="card wide"><h2>Create Super Admin</h2><form id="create-admin-form"><label>Name<input name="name" maxlength="60" required></label><label>Phone / User ID<input name="phone" inputmode="numeric" pattern="[0-9]{10,15}" required></label><label>Temporary PWD<input name="password" type="password" minlength="8" required></label><label>Seller Limit<input name="sellerLimit" type="number" min="1" max="100000" value="100" required></label><label>Owner PWD<input name="ownerPassword" type="password" required></label><button>Create Super Admin</button></form></article><article class="card wide"><h2>Change Owner PWD</h2><form id="owner-password-form"><label>Current PWD<input name="currentPassword" type="password" required></label><label>New PWD<input name="newPassword" type="password" minlength="8" required></label><button>Change PWD</button></form></article></section><h2>Super Admin Accounts</h2><section class="grid">${data.superAdmins.map(adminCard).join('') || '<p>No Super Admin accounts.</p>'}</section><p id="owner-message" class="notice">${escapeHtml(message)}</p><button id="owner-exit" class="secondary">Exit</button>`;
     document.querySelector('#create-admin-form').addEventListener('submit', createAdmin);
     document.querySelectorAll('.admin-limit-form').forEach((form) => form.addEventListener('submit', saveLimit));
+    document.querySelectorAll('.admin-password-reset-form').forEach((form) => form.addEventListener('submit', resetAdminPassword));
+    document.querySelector('#owner-password-form').addEventListener('submit', changeOwnerPassword);
     document.querySelector('#owner-exit').addEventListener('click', () => { sessionStorage.removeItem('token:OWNER'); token = null; loginScreen(); });
   } catch (error) { sessionStorage.removeItem('token:OWNER'); token = null; loginScreen(error.message); }
 }
@@ -50,6 +60,18 @@ async function createAdmin(event) {
 async function saveLimit(event) {
   event.preventDefault();
   try { await request('/api/owner/seller-limit', { method: 'PUT', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); await render('Seller limit saved successfully.'); }
+  catch (error) { showMessage(error.message, true); }
+}
+
+async function resetAdminPassword(event) {
+  event.preventDefault();
+  try { await request('/api/owner/super-admin-password-reset', { method: 'PUT', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); await render('Super Admin PWD reset successfully.'); }
+  catch (error) { showMessage(error.message, true); }
+}
+
+async function changeOwnerPassword(event) {
+  event.preventDefault();
+  try { await request('/api/me/password', { method: 'PUT', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); sessionStorage.removeItem('token:OWNER'); token = null; loginScreen('PWD changed. Sign in again.'); }
   catch (error) { showMessage(error.message, true); }
 }
 

@@ -25,6 +25,16 @@ const routes = {
     if (account.role === 'SELLER' && process.env.NODE_ENV === 'production' && !isAndroidSellerRequest(req)) return fail(403, 'Seller Entry is available only in the Android app');
     return ok({ token: createToken(account), user: publicUser(account) });
   },
+  'POST /api/auth/forgot-password': ({ body }) => {
+    const phone = String(body.phone ?? '').trim();
+    const account = store.users.find((item) => item.phone === phone && item.isActive && ['SELLER', 'SUPER_ADMIN', 'OWNER'].includes(item.role));
+    if (account) {
+      const existing = store.passwordResetRequests.find((item) => item.userId === account.id && item.status === 'PENDING');
+      if (!existing) createRecord('passwordResetRequests', { userId: account.id, phone: account.phone, role: account.role, parentId: account.parentId, status: 'PENDING' });
+      audit(account.id, 'PASSWORD_RESET_REQUESTED', 'user', account.id);
+    }
+    return ok({ requested: true, message: 'Password reset request submitted' });
+  },
   'GET /api/me': ({ user }) => ok(publicUser(store.users.find((item) => item.id === user.id))),
   'PUT /api/me/password': ({ body, user }) => {
     const account = store.users.find((item) => item.id === user.id);
@@ -40,14 +50,23 @@ const routes = {
   'PUT /api/users/password-reset': ({ body, user }) => {
     requireRole(user, 'SUPER_ADMIN');
     requireActionPassword(body, user, 'management');
-    const account = store.users.find((item) => item.id === body.userId && ['DISTRIBUTOR', 'SELLER'].includes(item.role));
-    if (!account) return fail(404, 'Distributor or Seller not found');
+    const account = store.users.find((item) => item.id === body.userId && item.role === 'SELLER' && item.parentId === user.id);
+    if (!account) return fail(404, 'Seller not found');
     const newPassword = String(body.newPassword ?? '');
     if (newPassword.length < 8) return fail(400, 'New password must contain at least 8 characters');
     account.passwordHash = hashPassword(newPassword);
     account.sessionVersion = Number(account.sessionVersion ?? 0) + 1;
+    for (const request of store.passwordResetRequests.filter((item) => item.userId === account.id && item.status === 'PENDING')) { request.status = 'COMPLETED'; request.completedAt = new Date().toISOString(); request.completedBy = user.id; }
     audit(user.id, 'USER_PASSWORD_RESET', 'user', account.id, { role: account.role });
     return ok({ changed: true, userId: account.id, loginRequired: true });
+  },
+  'GET /api/password-reset-requests': ({ user }) => {
+    const visible = user.role === 'OWNER'
+      ? store.passwordResetRequests.filter((item) => item.role === 'SUPER_ADMIN' && item.status === 'PENDING')
+      : user.role === 'SUPER_ADMIN'
+        ? store.passwordResetRequests.filter((item) => item.role === 'SELLER' && item.parentId === user.id && item.status === 'PENDING')
+        : [];
+    return ok([...visible].reverse());
   },
   'GET /api/license/status': () => ok(licenseStatus()),
   'GET /api/owner/control': ({ user }) => {
@@ -56,7 +75,7 @@ const routes = {
       const currentSellers = activeSellerCount(item.id);
       const totalSellersCreated = store.users.filter((account) => account.role === 'SELLER' && account.parentId === item.id).length;
       const sellerLimit = Number(item.sellerLimit ?? store.settings.maxSellers ?? 2000);
-      return { ...publicUser(item), currentSellers, totalSellersCreated, sellerLimit, remaining: Math.max(0, sellerLimit - currentSellers), financials: ownerFinancialSummary(item.id) };
+      return { ...publicUser(item), passwordResetPending: store.passwordResetRequests.some((request) => request.userId === item.id && request.status === 'PENDING'), currentSellers, totalSellersCreated, sellerLimit, remaining: Math.max(0, sellerLimit - currentSellers), financials: ownerFinancialSummary(item.id) };
     });
     return ok({ totalSuperAdmins: superAdmins.length, currentSellers: superAdmins.reduce((sum, item) => sum + item.currentSellers, 0), totalCapacity: superAdmins.reduce((sum, item) => sum + item.sellerLimit, 0), superAdmins });
   },
@@ -86,6 +105,19 @@ const routes = {
     superAdmin.sellerLimit = sellerLimit;
     audit(user.id, 'SELLER_LIMIT_UPDATED', 'user', superAdmin.id, { superAdminCode: superAdmin.superAdminCode, sellerLimit });
     return ok({ superAdminId: superAdmin.id, superAdminCode: superAdmin.superAdminCode, sellerLimit, currentSellers, remaining: sellerLimit - currentSellers });
+  },
+  'PUT /api/owner/super-admin-password-reset': ({ body, user }) => {
+    requireRole(user, 'OWNER');
+    requireOwnerPassword(body, user);
+    const account = store.users.find((item) => item.id === body.superAdminId && item.role === 'SUPER_ADMIN' && item.parentId === user.id);
+    if (!account) return fail(404, 'Super Admin not found');
+    const newPassword = String(body.newPassword ?? '');
+    if (newPassword.length < 8) return fail(400, 'New password must contain at least 8 characters');
+    account.passwordHash = hashPassword(newPassword);
+    account.sessionVersion = Number(account.sessionVersion ?? 0) + 1;
+    for (const request of store.passwordResetRequests.filter((item) => item.userId === account.id && item.status === 'PENDING')) { request.status = 'COMPLETED'; request.completedAt = new Date().toISOString(); request.completedBy = user.id; }
+    audit(user.id, 'SUPER_ADMIN_PASSWORD_RESET', 'user', account.id);
+    return ok({ changed: true, superAdminId: account.id, loginRequired: true });
   },
   'GET /api/settings': ({ user }) => ok(user.role === 'SUPER_ADMIN' ? store.settings : { schemes: visibleSchemes(user), schemeRates: assignedSchemeRates(user), pricing: visiblePricing(user.role) }),
   'PUT /api/settings': ({ body, user }) => {
@@ -208,7 +240,7 @@ const routes = {
     audit(user.id, 'SCHEME_PRICING_AND_PRIZES_UPDATED', 'schemeCatalog', scheme.id, { defaultRate, minimumRate, mrp, ...prizeUpdates });
     return ok(scheme);
   },
-  'GET /api/users': ({ user }) => ok(visibleUsers(user).map(publicUser)),
+  'GET /api/users': ({ user }) => ok(visibleUsers(user).map((item) => ({ ...publicUser(item), passwordResetPending: store.passwordResetRequests.some((request) => request.userId === item.id && request.status === 'PENDING') }))),
   'POST /api/users': ({ body, user }) => {
     if (user.role !== 'SUPER_ADMIN' || body.role !== 'SELLER') return fail(403, 'NGS allows Direct Seller accounts only');
     requireActionPassword(body, user, 'management');
@@ -1145,7 +1177,7 @@ const server = http.createServer(async (req, res) => {
     if (handler) {
       if (url.pathname === '/api/auth/login') enforceLoginRateLimit(req);
       const body = ['POST', 'PUT', 'PATCH'].includes(req.method) ? await readJson(req) : {};
-      const user = url.pathname === '/api/auth/login' || url.pathname === '/health' ? null : authenticate(req);
+      const user = ['/api/auth/login', '/api/auth/forgot-password', '/health'].includes(url.pathname) ? null : authenticate(req);
       if (user?.role === 'SELLER' && process.env.NODE_ENV === 'production' && !isAndroidSellerRequest(req)) return send(res, 403, { error: 'Seller Entry is available only in the Android app' });
       const result = await handler({ body, user, url, req });
       if (['POST', 'PUT', 'PATCH'].includes(req.method) && result.status < 400 && !['/api/auth/login', '/api/reports/result-preview'].includes(url.pathname)) persistStore();

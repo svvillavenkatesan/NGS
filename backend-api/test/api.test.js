@@ -104,4 +104,20 @@ test('NGS direct Seller workflow', async (context) => {
   const passwordChange = await json('/api/me/password', directToken, { method: 'PUT', body: JSON.stringify({ currentPassword: 'Seller@789', newPassword: 'Changed@789' }) });
   assert.equal(passwordChange.response.status, 200);
   await login('9555555555', 'Changed@789');
+
+  const forgotSeller = await json('/api/auth/forgot-password', null, { method: 'POST', body: JSON.stringify({ phone: '9777777781' }) });
+  assert.equal(forgotSeller.response.status, 200);
+  const branchRequests = await json('/api/password-reset-requests', branchAdmin);
+  assert.equal(branchRequests.data.some((item) => item.userId === branchSeller.data.id), true);
+  const resetSeller = await json('/api/users/password-reset', branchAdmin, { method: 'PUT', body: JSON.stringify({ userId: branchSeller.data.id, newPassword: 'Reset@321', actionPassword: 'Branch@123' }) });
+  assert.equal(resetSeller.response.status, 200);
+  await login('9777777781', 'Reset@321');
+
+  const forgotAdmin = await json('/api/auth/forgot-password', null, { method: 'POST', body: JSON.stringify({ phone: '9777777772' }) });
+  assert.equal(forgotAdmin.response.status, 200);
+  const ownerRequests = await json('/api/password-reset-requests', owner);
+  assert.equal(ownerRequests.data.some((item) => item.userId === newAdminTwo.data.id), true);
+  const resetAdmin = await json('/api/owner/super-admin-password-reset', owner, { method: 'PUT', body: JSON.stringify({ superAdminId: newAdminTwo.data.id, newPassword: 'Reset@124', ownerPassword: 'Owner@123' }) });
+  assert.equal(resetAdmin.response.status, 200);
+  await login('9777777772', 'Reset@124');
 });
