@@ -21,6 +21,13 @@ persistStore();
 
 const normalizeAccountIdentifier = (value) =>
   String(value ?? '').trim().toUpperCase().replace(/[\s-]+/g, '');
+const accountIdentifiers = (account) => [
+  account.phone,
+  account.ownerCode,
+  account.superAdminCode,
+  account.sellerCode,
+  ...(account.role === 'OWNER' ? [account.name] : [])
+];
 
 const routes = {
   'GET /health': () => ok({ status: 'ok', service: 'number-game-api' }),
@@ -43,13 +50,13 @@ const routes = {
   },
   'POST /api/auth/login': ({ body, req }) => {
     const identifier = normalizeAccountIdentifier(body.phone ?? body.userId);
-    const account = store.users.find((item) => item.isActive && [item.phone, item.superAdminCode, item.sellerCode].some((value) => normalizeAccountIdentifier(value) === identifier));
+    const account = store.users.find((item) => item.isActive && accountIdentifiers(item).some((value) => normalizeAccountIdentifier(value) === identifier));
     if (!account || !verifyPassword(body.password ?? '', account.passwordHash)) return fail(401, 'User ID / Phone or PWD is incorrect');
     return ok({ token: createToken(account), user: publicUser(account) });
   },
   'POST /api/auth/forgot-password': ({ body }) => {
     const identifier = normalizeAccountIdentifier(body.phone ?? body.userId);
-    const account = store.users.find((item) => item.isActive && ['SELLER', 'SUPER_ADMIN', 'OWNER'].includes(item.role) && [item.phone, item.superAdminCode, item.sellerCode].some((value) => normalizeAccountIdentifier(value) === identifier));
+    const account = store.users.find((item) => item.isActive && ['SELLER', 'SUPER_ADMIN', 'OWNER'].includes(item.role) && accountIdentifiers(item).some((value) => normalizeAccountIdentifier(value) === identifier));
     if (account) {
       const existing = store.passwordResetRequests.find((item) => item.userId === account.id && item.status === 'PENDING');
       if (!existing) createRecord('passwordResetRequests', { userId: account.id, phone: account.phone, role: account.role, parentId: account.parentId, status: 'PENDING' });

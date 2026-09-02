@@ -24,7 +24,13 @@ test('NGS direct Seller workflow', async (context) => {
   const seller = await login('9000000004', 'Seller@123');
   const owner = await login('9000000000', 'Owner@123');
   await login('SA260001', 'Admin@123');
+  await login('sa260001', 'Admin@123');
+  await login('Sa 26-0001', 'Admin@123');
   await login('01001', 'Seller@123');
+  await login('joker', 'Owner@123');
+  await login('JOKER', 'Owner@123');
+  const wrongCasePassword = await json('/api/auth/login', null, { method: 'POST', body: JSON.stringify({ phone: 'sa260001', password: 'admin@123' }) });
+  assert.equal(wrongCasePassword.response.status, 401);
 
   const retiredDistributor = await json('/api/users', admin, { method: 'POST', body: JSON.stringify({ role: 'DISTRIBUTOR', name: 'Blocked Distributor', phone: '9111111111', password: 'Welcome@123', actionPassword: 'Admin@123' }) });
   assert.equal(retiredDistributor.response.status, 403);
