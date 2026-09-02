@@ -68,10 +68,9 @@ async function login(event) {
 }
 
 async function renderDashboard() {
-  const [dashboard, users, candidateData, reports, resultCorrections] = await Promise.all([
+  const [dashboard, users, reports, resultCorrections] = await Promise.all([
     request('/api/dashboard'),
     request('/api/users'),
-    expectedRole === 'SUPER_ADMIN' ? request('/api/reports/result-candidates') : Promise.resolve(null),
     request('/api/reports/sales'),
     expectedRole === 'SUPER_ADMIN' ? request('/api/result-corrections') : Promise.resolve([])
   ]);
@@ -82,7 +81,7 @@ async function renderDashboard() {
   const roleLabel = expectedRole.replaceAll('_', ' ');
   document.querySelector('main').innerHTML = `
     ${expectedRole === 'DISTRIBUTOR' ? `<div class="title-row"><div><p class="muted">${roleLabel} CONTROL CENTER</p><h1>Welcome, ${escapeHtml(currentUser.name)}</h1></div><button class="secondary" id="logout">Sign out</button></div>` : ''}
-    ${expectedRole === 'SUPER_ADMIN' ? '<div class="compact-panel-title"><strong>NGS · SUPER ADMIN PANEL</strong></div><nav class="panel-tabs"><button type="button" class="active" data-panel-tab="overview">Dashboard</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="weekly-accounts">Accounts</button><button type="button" data-panel-tab="results">Results</button><button type="button" data-panel-tab="result-correction">Result Correction</button><button type="button" data-panel-tab="result-audit">Result Audit</button><button type="button" data-panel-tab="direct-sellers">Sellers</button><button type="button" data-panel-tab="schemes">Schemes</button><button type="button" data-panel-tab="lot-codes">Lot Codes</button><button type="button" data-panel-tab="security">Security</button><button type="button" data-panel-tab="validity">Validity</button><button type="button" class="seller-exit" id="logout">Exit</button></nav>' : ''}
+    ${expectedRole === 'SUPER_ADMIN' ? '<div class="compact-panel-title"><strong>NGS · SUPER ADMIN PANEL</strong></div><nav class="panel-tabs"><button type="button" class="active" data-panel-tab="overview">Dashboard</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="results">Results</button><button type="button" data-panel-tab="result-correction">Result Correction</button><button type="button" data-panel-tab="result-audit">Result Audit</button><button type="button" data-panel-tab="direct-sellers">Sellers</button><button type="button" data-panel-tab="schemes">Schemes</button><button type="button" data-panel-tab="lot-codes">Lot Codes</button><button type="button" data-panel-tab="security">Security</button><button type="button" data-panel-tab="validity">Validity</button><button type="button" class="seller-exit" id="logout">Exit</button></nav>' : ''}
     ${expectedRole === 'DISTRIBUTOR' ? '<nav class="panel-tabs"><button type="button" class="active" data-panel-tab="overview">Overview</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="accounts">Weekly Accounts</button><button type="button" data-panel-tab="sales">Sales</button><button type="button" data-panel-tab="network">Network</button><button type="button" data-panel-tab="schemes">Schemes</button><button type="button" data-panel-tab="results">Results</button></nav>' : ''}
     ${expectedRole === 'SELLER' ? '<nav class="panel-tabs seller-tabs"><button type="button" class="active" data-panel-tab="entry">Entry</button><button type="button" data-panel-tab="results">Results</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="sales">Sales</button><button type="button" data-panel-tab="account">My Account</button><button type="button" class="seller-exit" id="logout">Exit</button></nav>' : ''}
     ${expectedRole !== 'SELLER' ? `<section class="grid">
@@ -92,15 +91,14 @@ async function renderDashboard() {
     </section>` : ''}
     ${expectedRole === 'SUPER_ADMIN' ? `
       <section class="workspace" data-panel="overview">${performancePanel(dashboard.directSellerPerformance, dashboard.latestDraw)}${ticketsPanel(dashboard.recentTickets)}</section>
-      ${reportsWorkspace(reports)}
-      ${weeklyAccountsPanel(dashboard.weeklyAccounts)}
-      <section class="workspace hidden" data-panel="results">${dailyResultsPanel(dashboard.boards, dashboard.recentDraws ?? [], true)}${actionPanel(dashboard)}${profitTargetPanel(dashboard)}${candidatePanel(candidateData)}</section>
+      ${reportsWorkspace(reports, dashboard.weeklyAccounts)}
+      <section class="workspace hidden" data-panel="results">${dailyResultsPanel(dashboard.boards, dashboard.recentDraws ?? [], true)}<dialog id="result-publish-dialog" class="result-publish-dialog"></dialog></section>
       ${resultCorrectionPanel(dashboard.recentDraws ?? [], resultCorrections)}
       ${resultAuditPanel(dashboard.recentDraws ?? [])}
       ${directSellerWorkspace(dashboard.boards, dashboard.schemeCatalog, users, dashboard.sellerCapacity)}
       ${schemeCatalogPanel(dashboard.schemeCatalog)}
       ${lotCodePanel(dashboard.boards, dashboard.schemeCatalog)}
-      ${securityPanel(dashboard.actionSecurity)}
+      ${securityPanel(dashboard.actionSecurity, dashboard)}
       ${validityPanel(dashboard.accountValidity, dashboard.accountRenewal)}
     ` : expectedRole === 'DISTRIBUTOR' ? distributorControlCenter(dashboard, users, reports) : sellerControlCenter(dashboard, users, reports)}
     <p id="message" class="notice"></p>`;
@@ -178,8 +176,11 @@ function dailyResultsPanel(boards = [], draws = [], canPublish = false) {
   const findDraw = (boardId, showId, date) => draws.find((draw) => draw.boardId === boardId && draw.showId === showId && draw.resultDate === date);
   const todayRows = rows.map(({ board, show }) => {
     const draw = findDraw(board.id, show.id, today);
-    const publish = canPublish && !draw ? `<button type="button" class="secondary publish-scope" data-board-id="${escapeHtml(board.id)}" data-show-id="${escapeHtml(show.id)}" data-result-date="${today}">Publish</button>` : '—';
-    return `<tr><td>${today.split('-').reverse().join('/')}</td><td>${escapeHtml(board.code)}</td><td>${escapeHtml(show.label)}</td><td class="number compact-number">${draw ? escapeHtml(draw.winningNumber) : '----'}</td><td>${publish}</td><td><span class="status ${draw ? 'profit' : 'break_even'}">${draw ? 'PUBLISHED' : 'NOT PUBLISHED'}</span></td></tr>`;
+    const formId = `result-${board.id}-${show.id}`;
+    const result = draw ? `<span class="number compact-number">${escapeHtml(draw.winningNumber)}</span>` : canPublish ? `<form id="${escapeHtml(formId)}" class="inline-result-form"><input type="hidden" name="boardId" value="${escapeHtml(board.id)}"><input type="hidden" name="showId" value="${escapeHtml(show.id)}"><input type="hidden" name="resultDate" value="${today}"><input name="winningNumber" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="0000" aria-label="Winning number" required></form>` : '<span class="number compact-number">----</span>';
+    const publish = canPublish && !draw ? `<button class="secondary" form="${escapeHtml(formId)}">Publish</button>` : '—';
+    const cells = `<td>${today.split('-').reverse().join('/')}</td><td>${escapeHtml(board.code)}</td><td>${escapeHtml(show.label)}</td><td>${result}</td><td>${publish}</td><td><span class="status ${draw ? 'profit' : 'break_even'}">${draw ? 'PUBLISHED' : 'NOT PUBLISHED'}</span></td>`;
+    return `<tr>${cells}</tr>`;
   }).join('');
   const dates = Array.from({ length: 7 }, (_, index) => indiaDateOffset(-(index + 1)));
   const historyRows = rows.map(({ board, show }) => `<tr><th>${escapeHtml(board.code)} · ${escapeHtml(show.label)}</th>${dates.map((date) => { const draw = findDraw(board.id, show.id, date); return `<td class="${draw ? 'number compact-number' : 'muted'}">${draw ? escapeHtml(draw.winningNumber) : 'NOT PUBLISHED'}</td>`; }).join('')}</tr>`).join('');
@@ -307,10 +308,10 @@ function ticketsPanel(tickets) {
   const filters = lotCodes.length > 1 ? `<div class="compact-actions ticket-filters"><button type="button" class="active" data-ticket-filter="ALL">ALL</button>${lotCodes.map(([id, name]) => `<button type="button" data-ticket-filter="${escapeHtml(id)}">${escapeHtml(id === 'kerala' ? 'KL' : id === 'dear' ? 'DEAR' : name)}</button>`).join('')}</div>` : '';
   return `<article class="card wide"><h2>Recent ticket activity</h2>${tickets.length ? `${filters}<table><thead><tr><th>Lot Code</th><th>Show</th><th>Number</th><th>Scheme</th><th>Qty</th><th>Status</th><th>Prize</th></tr></thead><tbody>${tickets.map((ticket) => `<tr data-ticket-board="${escapeHtml(ticket.boardId)}"><td>${escapeHtml(ticket.boardName ?? '-')}</td><td>${escapeHtml(ticket.showLabel ?? '-')}</td><td class="number">${ticket.number}</td><td>${ticket.scheme.replaceAll('_', ' ')}</td><td>${ticket.quantity}</td><td>${ticket.status}</td><td>${money(ticket.prize)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Tickets will appear here after seller sales.</p>'}</article>`;
 }
-function weeklyAccountsPanel(accounts = {}) {
+function weeklyAccountsPanel(accounts = {}, embedded = false) {
   const rows = accounts.rows ?? [];
   const days = accounts.days ?? [];
-  return `<section class="workspace hidden" data-panel="weekly-accounts" id="weekly-accounts-panel">
+  const content = `
     <article class="card wide">
       <div class="title-row compact"><div><p class="muted">WEEKLY ACCOUNT · MONDAY TO SUNDAY</p><h2>Weekly Accounts</h2><p class="muted">${escapeHtml(accounts.weekStart || '—')} to ${escapeHtml(accounts.weekEnd || '—')}</p></div><form id="weekly-range-form"><label>Select a date in the week<input name="weekStart" type="date" value="${escapeHtml(accounts.weekStart || '')}" required></label><button type="submit" class="secondary">View Week</button></form></div>
       <h3>1. Weekly Net Account</h3><p class="muted">Total Sales − Prize − Other Expenses = Weekly Net Amount</p>
@@ -320,7 +321,8 @@ function weeklyAccountsPanel(accounts = {}) {
       <details><summary>Record Daily Expense</summary><form id="daily-expense-form" class="catalog-form"><label>Date<input name="expenseDate" type="date" min="${escapeHtml(accounts.weekStart || '')}" max="${escapeHtml(accounts.weekEnd || '')}" value="${escapeHtml(accounts.weekStart || '')}" required></label><label>Expense Amount<input name="amount" type="number" min="0.01" step="0.01" required></label><label>Expense Details<input name="note" placeholder="Expense purpose" required></label><label>Management Password<input name="actionPassword" type="password" required></label><button>Record Expense</button></form></details>
     </article>
     <article class="card wide"><h3>3. Distributor / Direct Seller Collection Status</h3><p class="muted">Distributor and Super Admin Direct Seller accounts are shown separately.</p><div class="metrics"><div><span>Amount Due</span><strong>${money(accounts.totalDue)}</strong></div><div><span>Amount Received</span><strong>${money(accounts.totalReceived)}</strong></div><div><span>Balance Due</span><strong class="${accounts.totalBalance > 0 ? 'error' : ''}">${money(accounts.totalBalance)}</strong></div></div>${rows.length ? `<table><thead><tr><th>Account</th><th>Type</th><th>Tickets</th><th>Amount Due</th><th>Amount received</th><th>Balance Due</th><th>Record Payment</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${row.role === 'SELLER' ? 'Direct Seller' : 'Distributor'}</td><td>${row.quantity}</td><td>${money(row.netDue)}</td><td>${money(row.received)}</td><td class="${row.balance > 0 ? 'error' : ''}"><strong>${money(row.balance)}</strong></td><td><form class="weekly-payment-form"><input type="hidden" name="distributorId" value="${escapeHtml(row.distributorId)}"><input type="hidden" name="weekStart" value="${escapeHtml(accounts.weekStart)}"><input name="amount" type="number" min="0.01" step="0.01" placeholder="Received Amount" required><input name="reference" placeholder="Reference / Note"><input name="actionPassword" type="password" placeholder="Management Password" required><button>Payment Received</button></form></td></tr>`).join('')}</tbody></table>` : '<p class="muted">No accounts available.</p>'}</article>
-  </section>`;
+  `;
+  return embedded ? `<div id="weekly-accounts-panel" class="wide reports-accounts">${content}</div>` : `<section class="workspace hidden" data-panel="weekly-accounts" id="weekly-accounts-panel">${content}</section>`;
 }
 function candidatePanel(data) {
   if (expectedRole !== 'SUPER_ADMIN') return '';
@@ -382,9 +384,9 @@ function lotCodePanel(boards = [], catalog = []) {
   return `<section class="workspace hidden" data-panel="lot-codes"><article class="card wide"><p class="muted">LOT CODE ASSIGNMENT & TIMINGS</p><h2>Configure Lot Code</h2><form id="board-config-form"><label>Lot Code<select name="boardId" id="config-lot-code">${boards.map((board) => `<option value="${board.id}">${escapeHtml(board.code)} - ${escapeHtml(board.name)}</option>`).join('')}</select></label><fieldset class="scheme-rates"><legend>Available schemes</legend><p class="muted">The 8 Single/Double schemes are common to every Lot Code. Select any additional 3D and 4D schemes required.</p><div>${catalog.map((item) => `<label class="check board-scheme"><input type="checkbox" name="assignedScheme" value="${item.id}" data-universal="${item.universal ? 'true' : 'false'}" ${item.universal || boards[0]?.schemeIds?.includes(item.id) ? 'checked' : ''} ${item.universal ? 'disabled' : ''}> ${escapeHtml(item.name)}${item.universal ? ' · Common' : ''}</label>`).join('')}</div></fieldset><fieldset class="scheme-rates"><legend id="timing-legend">Daily Timings</legend>${scheduleRow('show1', 'Show 1', '00:01', '15:00')}${scheduleRow('show2', 'Show 2', '00:01', '17:58')}${scheduleRow('show3', 'Show 3', '00:01', '19:58')}${scheduleRow('show4', 'Show 4', '', '')}${scheduleRow('show5', 'Show 5', '', '')}</fieldset><fieldset class="scheme-rates" id="kerala-date-override"><legend>Kerala Special-Date Closing (Optional)</legend><p class="muted">Use this only when Kerala entry must close earlier on one specific date. The normal 3:00 PM closing resumes automatically on other dates.</p><label>Special Date<input type="date" name="specialDate"></label><label>Closing Time<input type="time" name="specialEndTime" value="14:00"></label></fieldset><label>Management Password<input name="actionPassword" type="password" autocomplete="off" required></label><button>Save Lot Code configuration</button></form></article>
   <article class="card wide"><p class="muted">NEW LOT CODE</p><h2>Add Lot Code</h2><form id="board-form" class="catalog-form"><label>Lot Code<input name="code" placeholder="Example: PB" maxlength="8" required></label><label class="catalog-name">Lot Code name<input name="name" placeholder="Example: Punjab" minlength="2" maxlength="40" required></label><label>Management Password<input name="actionPassword" type="password" autocomplete="off" required></label><button>Add Lot Code</button></form></article></section>`;
 }
-function securityPanel(security = {}) {
+function securityPanel(security = {}, dashboard = {}) {
   if (expectedRole !== 'SUPER_ADMIN') return '';
-  return `<section class="workspace hidden" data-panel="security"><article class="card wide"><p class="muted">ACTION PASSWORD SECURITY</p><h2>Result and Management passwords</h2><p class="muted">Result: ${security.resultPasswordConfigured ? 'Separate password configured' : 'Uses Super Admin password'} · Management: ${security.managementPasswordConfigured ? 'Separate password configured' : 'Uses Super Admin password'}</p><form id="security-password-form" class="catalog-form"><label>Current Super Admin Password<input name="currentPassword" type="password" autocomplete="current-password" required></label><label>New Result Password<input name="resultPassword" type="password" minlength="8" autocomplete="new-password" required></label><label>New Management Password<input name="managementPassword" type="password" minlength="8" autocomplete="new-password" required></label><button>Save security passwords</button></form><p class="muted">Published Results cannot be edited or deleted.</p></article>${changePasswordPanel()}</section>`;
+  return `<section class="workspace hidden" data-panel="security"><article class="card wide"><p class="muted">ACTION PASSWORD SECURITY</p><h2>Result and Management passwords</h2><p class="muted">Result: ${security.resultPasswordConfigured ? 'Separate password configured' : 'Uses Super Admin password'} · Management: ${security.managementPasswordConfigured ? 'Separate password configured' : 'Uses Super Admin password'}</p><form id="security-password-form" class="catalog-form"><label>Current Super Admin Password<input name="currentPassword" type="password" autocomplete="current-password" required></label><label>New Result Password<input name="resultPassword" type="password" minlength="8" autocomplete="new-password" required></label><label>New Management Password<input name="managementPassword" type="password" minlength="8" autocomplete="new-password" required></label><button>Save security passwords</button></form><p class="muted">Published Results cannot be edited or deleted.</p></article>${profitTargetPanel(dashboard)}${changePasswordPanel()}</section>`;
 }
 
 function validityPanel(validity = {}, renewal = null) {
@@ -399,12 +401,12 @@ function scheduleRow(id, label, start, end) {
 function prizeGroup(title, schemes, values) {
   return `<fieldset class="prize-group"><legend>${title}</legend><div class="prize-grid">${schemes.map(([key, label]) => `<label><span>${label}</span><input name="${key}" type="number" min="0" step="1" value="${values[key]}" required></label>`).join('')}</div></fieldset>`;
 }
-function reportsWorkspace(reports = []) {
+function reportsWorkspace(reports = [], accounts) {
   const rows = reports.slice(0, 100);
   const sellers = [...new Set(rows.map((item) => item.sellerName))];
   const totals = rows.reduce((sum, item) => ({ quantity: sum.quantity + Number(item.totalQuantity ?? 0), sales: sum.sales + Number(item.totalSales ?? 0), prize: sum.prize + Number(item.totalPrize ?? 0), bonus: sum.bonus + Number(item.totalBonus ?? 0), net: sum.net + Number(item.totalNet ?? 0) }), { quantity: 0, sales: 0, prize: 0, bonus: 0, net: 0 });
   const summary = `<div class="metrics report-summary"><div><span>Quantity</span><strong>${totals.quantity}</strong></div><div><span>Sales</span><strong>${money(totals.sales)}</strong></div><div><span>Prize</span><strong>${money(totals.prize)}</strong></div><div><span>Bonus</span><strong>${money(totals.bonus)}</strong></div><div><span>Net</span><strong>${money(totals.net)}</strong></div></div>`;
-  return `<section class="workspace hidden" data-panel="reports"><article class="card wide report-list-card"><h2>Detailed Reports</h2>${summary}<form id="report-filter" class="catalog-form"><label>Date<input name="date" type="date"></label><label>Seller<select name="seller"><option value="">All</option>${sellers.map((name) => `<option>${escapeHtml(name)}</option>`).join('')}</select></label><label>Lot Code<select name="lot"><option value="">All</option>${[...new Set(rows.map((item) => item.boardCode))].map((code) => `<option>${escapeHtml(code)}</option>`).join('')}</select></label><label>Show<select name="show"><option value="">All</option>${[...new Set(rows.map((item) => item.showLabel))].map((show) => `<option>${escapeHtml(show)}</option>`).join('')}</select></label></form>${rows.length ? `<table class="report-list"><thead><tr><th>Date</th><th>Seller</th><th>Lot / Show</th><th>Entries / Qty</th><th>Sales</th><th>Prize</th><th>Bonus</th><th>Net</th><th>Status</th><th></th></tr></thead><tbody>${rows.map((report) => `<tr data-date="${escapeHtml(report.businessDate)}" data-seller="${escapeHtml(report.sellerName)}" data-lot="${escapeHtml(report.boardCode)}" data-show="${escapeHtml(report.showLabel)}"><td>${escapeHtml(report.businessDate)}</td><td>${escapeHtml(report.sellerCode ?? '')} · ${escapeHtml(report.sellerName)}</td><td>${escapeHtml(report.boardCode)} · ${escapeHtml(report.showLabel)}</td><td>${report.entryCount} / ${report.totalQuantity}</td><td>${money(report.totalSales)}</td><td>${money(report.totalPrize)}</td><td>${money(report.totalBonus)}</td><td>${money(report.totalNet)}</td><td><span class="status ${report.status === 'FINALIZED' ? 'profit' : 'break_even'}">${escapeHtml(report.status)}</span></td><td><button type="button" class="secondary view-report" data-report-id="${escapeHtml(report.id)}">View</button></td></tr>`).join('')}</tbody></table>` : '<p>No reports.</p>'}</article><div id="report-detail" class="wide"></div></section>`;
+  return `<section class="workspace hidden" data-panel="reports"><article class="card wide report-list-card"><h2>Detailed Reports</h2>${summary}<form id="report-filter" class="catalog-form"><label>Date<input name="date" type="date"></label><label>Seller<select name="seller"><option value="">All</option>${sellers.map((name) => `<option>${escapeHtml(name)}</option>`).join('')}</select></label><label>Lot Code<select name="lot"><option value="">All</option>${[...new Set(rows.map((item) => item.boardCode))].map((code) => `<option>${escapeHtml(code)}</option>`).join('')}</select></label><label>Show<select name="show"><option value="">All</option>${[...new Set(rows.map((item) => item.showLabel))].map((show) => `<option>${escapeHtml(show)}</option>`).join('')}</select></label></form>${rows.length ? `<table class="report-list"><thead><tr><th>Date</th><th>Seller</th><th>Lot / Show</th><th>Entries / Qty</th><th>Sales</th><th>Prize</th><th>Bonus</th><th>Net</th><th>Status</th><th></th></tr></thead><tbody>${rows.map((report) => `<tr data-date="${escapeHtml(report.businessDate)}" data-seller="${escapeHtml(report.sellerName)}" data-lot="${escapeHtml(report.boardCode)}" data-show="${escapeHtml(report.showLabel)}"><td>${escapeHtml(report.businessDate)}</td><td>${escapeHtml(report.sellerCode ?? '')} · ${escapeHtml(report.sellerName)}</td><td>${escapeHtml(report.boardCode)} · ${escapeHtml(report.showLabel)}</td><td>${report.entryCount} / ${report.totalQuantity}</td><td>${money(report.totalSales)}</td><td>${money(report.totalPrize)}</td><td>${money(report.totalBonus)}</td><td>${money(report.totalNet)}</td><td><span class="status ${report.status === 'FINALIZED' ? 'profit' : 'break_even'}">${escapeHtml(report.status)}</span></td><td><button type="button" class="secondary view-report" data-report-id="${escapeHtml(report.id)}">View</button></td></tr>`).join('')}</tbody></table>` : '<p>No reports.</p>'}</article><div id="report-detail" class="wide"></div>${expectedRole === 'SUPER_ADMIN' && accounts ? weeklyAccountsPanel(accounts, true) : ''}</section>`;
 }
 function sampleDetailedReport() {
   const base = { date: '27/08/2026', time: '10:25:14', billNumber: 'KL3-27-THU-0001', winningNumber: '0204', bonusPercentage: 10, corrected: false };
@@ -463,17 +465,7 @@ function wireReportActions() {
   });
 }
 function wireActions() {
-  document.querySelector('#result-form')?.addEventListener('submit', publishResult);
-  document.querySelectorAll('.publish-scope').forEach((button) => button.addEventListener('click', () => {
-    const form = document.querySelector('#result-form');
-    if (!form) return;
-    form.elements.boardId.value = button.dataset.boardId;
-    syncResultShows('publish');
-    form.elements.showId.value = button.dataset.showId;
-    form.elements.resultDate.value = button.dataset.resultDate;
-    form.querySelector('input[name="winningNumber"]')?.focus();
-    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }));
+  document.querySelectorAll('.inline-result-form').forEach((form) => form.addEventListener('submit', prepareResultPublish));
   wireReportActions();
   document.querySelector('#preview-form')?.addEventListener('submit', previewResult);
   for (const prefix of ['publish', 'preview']) document.querySelector(`#${prefix}-result-board`)?.addEventListener('change', () => { syncResultShows(prefix); if (prefix === 'preview') refreshCandidates(); });
@@ -726,17 +718,17 @@ async function refreshCandidates() {
 function wireWeeklyActions() {
   document.querySelector('#weekly-range-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    try { const values = Object.fromEntries(new FormData(event.currentTarget)); const data = await request(`/api/reports/weekly-accounts?weekStart=${encodeURIComponent(values.weekStart)}`); document.querySelector('#weekly-accounts-panel').outerHTML = weeklyAccountsPanel(data); wireWeeklyActions(); }
+    try { const values = Object.fromEntries(new FormData(event.currentTarget)); const data = await request(`/api/reports/weekly-accounts?weekStart=${encodeURIComponent(values.weekStart)}`); document.querySelector('#weekly-accounts-panel').outerHTML = weeklyAccountsPanel(data, true); wireWeeklyActions(); }
     catch (error) { notify(error.message, true); }
   });
   document.querySelectorAll('.weekly-payment-form').forEach((form) => form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    try { const data = await request('/api/weekly-payments', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); document.querySelector('#weekly-accounts-panel').outerHTML = weeklyAccountsPanel(data.accounts); wireWeeklyActions(); notify('Weekly payment recorded'); }
+    try { const data = await request('/api/weekly-payments', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); document.querySelector('#weekly-accounts-panel').outerHTML = weeklyAccountsPanel(data.accounts, true); wireWeeklyActions(); notify('Weekly payment recorded'); }
     catch (error) { notify(error.message, true); }
   }));
   document.querySelector('#daily-expense-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    try { const data = await request('/api/daily-expenses', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); document.querySelector('#weekly-accounts-panel').outerHTML = weeklyAccountsPanel(data.accounts); wireWeeklyActions(); notify('Daily expense recorded'); }
+    try { const data = await request('/api/daily-expenses', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); document.querySelector('#weekly-accounts-panel').outerHTML = weeklyAccountsPanel(data.accounts, true); wireWeeklyActions(); notify('Daily expense recorded'); }
     catch (error) { notify(error.message, true); }
   });
 }
@@ -1030,6 +1022,28 @@ async function publishResult(event) {
     const preview = data.preview;
     await renderDashboard();
     notify(data.belowTarget ? `Result published with warning: ${money(preview.projectedProfit)} (${preview.profitPercentage}%), below ${preview.minimumProfitLabel} target` : `Result published: ${money(preview.projectedProfit)} (${preview.profitPercentage}%)`, data.belowTarget);
+  } catch (error) { notify(error.message, true); }
+}
+async function prepareResultPublish(event) {
+  event.preventDefault();
+  const values = Object.fromEntries(new FormData(event.currentTarget));
+  try {
+    const preview = await request('/api/reports/result-preview', { method: 'POST', body: JSON.stringify(values) });
+    const dialog = document.querySelector('#result-publish-dialog');
+    if (!dialog) return;
+    dialog.innerHTML = `<form id="confirm-result-form" method="dialog"><div class="title-row compact"><div><p class="muted">CONFIRM RESULT</p><h2>${escapeHtml(values.winningNumber)}</h2></div><button type="button" class="secondary" data-close-dialog>Close</button></div><div class="metrics"><div><span>Ticket Qty</span><strong>${preview.ticketQuantity}</strong></div><div><span>Sales Margin</span><strong>${money(preview.adminMargin)}</strong></div><div><span>Prize</span><strong>${money(preview.totalPrizes)}</strong></div><div><span>Profit / Loss</span><strong class="${preview.projectedProfit < 0 ? 'error' : ''}">${money(preview.projectedProfit)} · ${preview.profitPercentage}%</strong></div></div>${preview.meetsMinimumProfit ? '' : `<p class="error">Below minimum target: ${escapeHtml(preview.minimumProfitLabel)}</p><label class="check"><input name="overrideBelowTarget" type="checkbox" required> Confirm below-target override</label><label>Override reason<input name="overrideReason" minlength="5" required></label>`}<label>Result PWD<input name="actionPassword" type="password" autocomplete="off" required></label><button type="submit">Confirm & Publish</button></form>`;
+    dialog.querySelector('[data-close-dialog]').onclick = () => dialog.close();
+    dialog.querySelector('#confirm-result-form').addEventListener('submit', async (confirmEvent) => {
+      confirmEvent.preventDefault();
+      const extra = Object.fromEntries(new FormData(confirmEvent.currentTarget));
+      try {
+        const data = await request('/api/draws', { method: 'POST', body: JSON.stringify({ ...values, ...extra, overrideBelowTarget: extra.overrideBelowTarget === 'on' }) });
+        dialog.close();
+        await renderDashboard();
+        notify(data.belowTarget ? `Result published with warning: ${money(data.preview.projectedProfit)}` : `Result published: ${money(data.preview.projectedProfit)}`, data.belowTarget);
+      } catch (error) { notify(error.message, true); }
+    });
+    dialog.showModal();
   } catch (error) { notify(error.message, true); }
 }
 async function submitForm(event, path) {

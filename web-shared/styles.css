@@ -22,6 +22,13 @@ th, td { text-align: left; padding: 12px; border-bottom: 1px solid #263a50; }
 .workspace .card.wide { overflow-x: auto; }
 .workspace table { min-width: 980px; }
 .workspace table input { width: 76px; min-width: 76px; margin: 0; padding: 9px 10px; }
+.inline-result-form { margin: 0; }
+.inline-result-form input { font-size: 18px; font-weight: 800; letter-spacing: .18em; color: #ffce66; text-align: center; }
+.result-publish-dialog { width: min(620px, 92vw); color: #f7f0ff; background: #211133; border: 1px solid #684884; border-radius: 14px; padding: 18px; box-shadow: 0 24px 80px #000b; }
+.result-publish-dialog::backdrop { background: #08030dcc; }
+.result-publish-dialog form { margin: 0; }
+.result-publish-dialog h2 { color: #ffce66; letter-spacing: .3em; }
+.reports-accounts { margin-top: 10px; display: grid; gap: 10px; }
 .number { letter-spacing: .35em; color: #ffce66; }
 .login { width: min(460px, 100%); margin: 9vh auto; }
 .login h1 { font-size: 42px; }
