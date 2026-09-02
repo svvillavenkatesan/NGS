@@ -986,8 +986,9 @@ function buildLockedResultAudit(draw, tickets) {
     { id: '80-plus', label: '80%+', minimum: 80, maximum: null, numbers: [] }
   ];
   let actual = null;
-  for (let value = 0; value <= 9999; value += 1) {
-    const winningNumber = String(value).padStart(4, '0');
+  const enteredNumbers = [...new Set(tickets.map((ticket) => String(ticket.number)).filter((number) => /^\d{4}$/.test(number)))].sort();
+  const auditNumbers = [...new Set([...enteredNumbers, String(draw.winningNumber)])].sort();
+  for (const winningNumber of auditNumbers) {
     const totalPrizes = tickets.reduce((sum, ticket) => {
       const result = evaluateTicket(ticket.number, winningNumber, prizeSchemeForTicket(ticket), ticket.catalogPattern);
       return sum + result.prize * ticket.quantity;
@@ -1004,6 +1005,8 @@ function buildLockedResultAudit(draw, tickets) {
     totalSales,
     adminMargin,
     baseCost,
+    enteredNumberCount: enteredNumbers.length,
+    auditedNumberCount: auditNumbers.length,
     actual,
     bands: bands.map((band) => ({ ...band, count: band.numbers.length }))
   };
