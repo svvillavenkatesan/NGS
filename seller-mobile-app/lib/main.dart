@@ -1193,6 +1193,23 @@ class _Entry extends State<Entry> {
                   .toList()),
           const SizedBox(height: 10),
           FilledButton(onPressed: add, child: const Text('Add to Bill')),
+          if (cart.isNotEmpty)
+            Container(
+                margin: const EdgeInsets.only(top: 7),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                    color: const Color(0xff211133),
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(color: const Color(0xff51326d))),
+                child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('${cart.length} entries'),
+                      Text('Total  ₹${total.toStringAsFixed(0)}',
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold))
+                    ])),
           if (note.isNotEmpty)
             Padding(padding: const EdgeInsets.all(8), child: Text(note)),
           const Divider(),
@@ -1217,12 +1234,6 @@ class _Entry extends State<Entry> {
                         onPressed: () => setState(
                             () => cart.removeAt(cart.length - 1 - e.key))))
               ]))),
-          if (cart.isNotEmpty)
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text('${cart.length} entries'),
-              Text('₹${total.toStringAsFixed(0)}',
-                  style: Theme.of(c).textTheme.headlineSmall)
-            ])
         ])),
         bottomNavigationBar: SafeArea(
             child: Container(
