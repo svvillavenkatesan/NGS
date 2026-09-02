@@ -153,16 +153,25 @@ test('NGS direct Seller workflow', async (context) => {
   assert.equal(forgotSeller.response.status, 200);
   const branchRequests = await json('/api/password-reset-requests', branchAdmin);
   assert.equal(branchRequests.data.some((item) => item.userId === branchSeller.data.id), true);
-  const resetSeller = await json('/api/users/password-reset', branchAdmin, { method: 'PUT', body: JSON.stringify({ userId: branchSeller.data.id, newPassword: 'Reset@321', actionPassword: 'Branch@123' }) });
+  const resetSeller = await json('/api/users/password-reset', branchAdmin, { method: 'PUT', body: JSON.stringify({ userId: branchSeller.data.id }) });
   assert.equal(resetSeller.response.status, 200);
+  assert.equal(resetSeller.data.temporaryPassword, '12345678');
+  const resetSellerToken = await login('9777777781', '12345678');
+  const blockedUntilSellerChange = await json('/api/dashboard', resetSellerToken);
+  assert.equal(blockedUntilSellerChange.response.status, 403);
+  const setSellerPassword = await json('/api/me/password', resetSellerToken, { method: 'PUT', body: JSON.stringify({ newPassword: 'Reset@321' }) });
+  assert.equal(setSellerPassword.response.status, 200);
   await login('9777777781', 'Reset@321');
 
   const forgotAdmin = await json('/api/auth/forgot-password', null, { method: 'POST', body: JSON.stringify({ phone: '9777777772' }) });
   assert.equal(forgotAdmin.response.status, 200);
   const ownerRequests = await json('/api/password-reset-requests', owner);
   assert.equal(ownerRequests.data.some((item) => item.userId === newAdminTwo.data.id), true);
-  const resetAdmin = await json('/api/owner/super-admin-password-reset', owner, { method: 'PUT', body: JSON.stringify({ superAdminId: newAdminTwo.data.id, newPassword: 'Reset@124', ownerPassword: 'Owner@123' }) });
+  const resetAdmin = await json('/api/owner/super-admin-password-reset', owner, { method: 'PUT', body: JSON.stringify({ superAdminId: newAdminTwo.data.id }) });
   assert.equal(resetAdmin.response.status, 200);
+  const resetAdminToken = await login('9777777772', '12345678');
+  const setAdminPassword = await json('/api/me/password', resetAdminToken, { method: 'PUT', body: JSON.stringify({ newPassword: 'Reset@124' }) });
+  assert.equal(setAdminPassword.response.status, 200);
   await login('9777777772', 'Reset@124');
 
   const newLotCode = await json('/api/settings/boards', admin, { method: 'POST', body: JSON.stringify({ code: 'TS', name: 'Test State', actionPassword: 'Admin@123' }) });

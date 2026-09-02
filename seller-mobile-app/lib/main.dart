@@ -63,7 +63,9 @@ class _Login extends State<Login> {
       }
       if (mounted) {
         Navigator.pushReplacement(context,
-            MaterialPageRoute(builder: (_) => Entry(token: d['token'])));
+            MaterialPageRoute(builder: (_) => d['user']['mustChangePassword'] == true
+                ? RequiredPasswordChange(token: d['token'])
+                : Entry(token: d['token'])));
       }
     } catch (e) {
       setState(() => error = e.toString().replaceFirst('Exception: ', ''));
@@ -113,6 +115,50 @@ class _Login extends State<Login> {
           ),
         ),
       );
+}
+
+class RequiredPasswordChange extends StatefulWidget {
+  const RequiredPasswordChange({super.key, required this.token});
+  final String token;
+  @override
+  State<RequiredPasswordChange> createState() => _RequiredPasswordChange();
+}
+
+class _RequiredPasswordChange extends State<RequiredPasswordChange> {
+  final password = TextEditingController(), confirm = TextEditingController();
+  bool busy = false;
+  String error = '';
+  @override
+  void dispose() { password.dispose(); confirm.dispose(); super.dispose(); }
+  Future<void> save() async {
+    if (password.text.length < 8 || password.text != confirm.text) {
+      setState(() => error = 'Enter matching PWDs with at least 8 characters');
+      return;
+    }
+    setState(() => busy = true);
+    try {
+      final response = await http.put(Uri.parse('$api/api/me/password'),
+          headers: headers(widget.token), body: jsonEncode({'newPassword': password.text}));
+      if (response.statusCode != 200) throw Exception(jsonDecode(response.body)['error']);
+      if (!mounted) return;
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Login()));
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+    } finally { if (mounted) setState(() => busy = false); }
+  }
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Set New PWD')),
+    body: SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        TextField(controller: password, obscureText: true, decoration: const InputDecoration(labelText: 'New PWD')),
+        TextField(controller: confirm, obscureText: true, decoration: const InputDecoration(labelText: 'Confirm New PWD')),
+        const SizedBox(height: 16),
+        FilledButton(onPressed: busy ? null : save, child: Text(busy ? 'Saving...' : 'Save New PWD')),
+        if (error.isNotEmpty) Text(error, style: const TextStyle(color: Colors.redAccent)),
+      ],
+    )),
+  );
 }
 
 class Entry extends StatefulWidget {

@@ -67,27 +67,28 @@ const routes = {
   'GET /api/me': ({ user }) => ok(publicUser(store.users.find((item) => item.id === user.id))),
   'PUT /api/me/password': ({ body, user }) => {
     const account = store.users.find((item) => item.id === user.id);
-    if (!account || !verifyPassword(String(body.currentPassword ?? ''), account.passwordHash)) return fail(403, 'Current password is incorrect');
+    if (!account || (!account.mustChangePassword && !verifyPassword(String(body.currentPassword ?? ''), account.passwordHash))) return fail(403, 'Current password is incorrect');
     const newPassword = String(body.newPassword ?? '');
     if (newPassword.length < 8) return fail(400, 'New password must contain at least 8 characters');
     if (verifyPassword(newPassword, account.passwordHash)) return fail(400, 'New password must be different from the current password');
     account.passwordHash = hashPassword(newPassword);
     account.sessionVersion = Number(account.sessionVersion ?? 0) + 1;
+    account.mustChangePassword = false;
     audit(user.id, 'OWN_PASSWORD_CHANGED', 'user', account.id);
     return ok({ changed: true, loginRequired: true });
   },
   'PUT /api/users/password-reset': ({ body, user }) => {
     requireRole(user, 'SUPER_ADMIN');
-    requireActionPassword(body, user, 'management');
     const account = store.users.find((item) => item.id === body.userId && item.role === 'SELLER' && item.parentId === user.id);
     if (!account) return fail(404, 'Seller not found');
-    const newPassword = String(body.newPassword ?? '');
-    if (newPassword.length < 8) return fail(400, 'New password must contain at least 8 characters');
-    account.passwordHash = hashPassword(newPassword);
+    const pending = store.passwordResetRequests.some((item) => item.userId === account.id && item.status === 'PENDING');
+    if (!pending) return fail(409, 'No pending password reset request');
+    account.passwordHash = hashPassword('12345678');
+    account.mustChangePassword = true;
     account.sessionVersion = Number(account.sessionVersion ?? 0) + 1;
     for (const request of store.passwordResetRequests.filter((item) => item.userId === account.id && item.status === 'PENDING')) { request.status = 'COMPLETED'; request.completedAt = new Date().toISOString(); request.completedBy = user.id; }
     audit(user.id, 'USER_PASSWORD_RESET', 'user', account.id, { role: account.role });
-    return ok({ changed: true, userId: account.id, loginRequired: true });
+    return ok({ changed: true, userId: account.id, temporaryPassword: '12345678', loginRequired: true, mustChangePassword: true });
   },
   'GET /api/password-reset-requests': ({ user }) => {
     const visible = user.role === 'OWNER'
@@ -141,16 +142,16 @@ const routes = {
   },
   'PUT /api/owner/super-admin-password-reset': ({ body, user }) => {
     requireRole(user, 'OWNER');
-    requireOwnerPassword(body, user);
     const account = store.users.find((item) => item.id === body.superAdminId && item.role === 'SUPER_ADMIN' && item.parentId === user.id);
     if (!account) return fail(404, 'Super Admin not found');
-    const newPassword = String(body.newPassword ?? '');
-    if (newPassword.length < 8) return fail(400, 'New password must contain at least 8 characters');
-    account.passwordHash = hashPassword(newPassword);
+    const pending = store.passwordResetRequests.some((item) => item.userId === account.id && item.status === 'PENDING');
+    if (!pending) return fail(409, 'No pending password reset request');
+    account.passwordHash = hashPassword('12345678');
+    account.mustChangePassword = true;
     account.sessionVersion = Number(account.sessionVersion ?? 0) + 1;
     for (const request of store.passwordResetRequests.filter((item) => item.userId === account.id && item.status === 'PENDING')) { request.status = 'COMPLETED'; request.completedAt = new Date().toISOString(); request.completedBy = user.id; }
     audit(user.id, 'SUPER_ADMIN_PASSWORD_RESET', 'user', account.id);
-    return ok({ changed: true, superAdminId: account.id, loginRequired: true });
+    return ok({ changed: true, superAdminId: account.id, temporaryPassword: '12345678', loginRequired: true, mustChangePassword: true });
   },
   'GET /api/account-validity': ({ user }) => ok(accountValidityForUser(user)),
   'POST /api/license/renewal-request': ({ body, user }) => {
@@ -1459,6 +1460,10 @@ const server = http.createServer(async (req, res) => {
       if (url.pathname === '/api/auth/login') enforceLoginRateLimit(req);
       const body = ['POST', 'PUT', 'PATCH'].includes(req.method) ? await readJson(req) : {};
       const user = ['/api/auth/login', '/api/auth/forgot-password', '/api/public-results', '/api/public-result-history', '/health'].includes(url.pathname) ? null : authenticate(req);
+      if (user) {
+        const account = store.users.find((item) => item.id === user.id);
+        if (account?.mustChangePassword && !['/api/me', '/api/me/password'].includes(url.pathname)) return send(res, 403, { error: 'Set a new password before continuing', mustChangePassword: true });
+      }
       const result = await handler({ body, user, url, req });
       if (['POST', 'PUT', 'PATCH'].includes(req.method) && result.status < 400 && !['/api/auth/login', '/api/reports/result-preview'].includes(url.pathname)) persistStore();
       return send(res, result.status, result.body);

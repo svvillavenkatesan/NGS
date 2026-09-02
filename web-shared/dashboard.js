@@ -21,6 +21,7 @@ async function boot() {
   try {
     currentUser = await request('/api/me');
     if (currentUser.role !== expectedRole) throw new Error('This account belongs to a different portal');
+    if (currentUser.mustChangePassword) return showRequiredPasswordChange();
     await renderDashboard();
   } catch (error) { token = null; sessionStorage.removeItem(`token:${expectedRole}`); showLogin(error.message); }
 }
@@ -41,8 +42,8 @@ function usePwdLabels(root) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const nodes = [];
   while (walker.nextNode()) nodes.push(walker.currentNode);
-  for (const node of nodes) node.nodeValue = node.nodeValue.replaceAll('Passwords', 'PWDs').replaceAll('Password', 'PWD').replaceAll('password', 'PWD');
-  root.querySelectorAll('[placeholder]').forEach((item) => { item.placeholder = item.placeholder.replaceAll('Password', 'PWD').replaceAll('password', 'PWD'); });
+  for (const node of nodes) node.nodeValue = node.nodeValue.replaceAll('Passwords', 'PWDs').replaceAll('Password', 'PWD').replaceAll('password', 'PWD').replaceAll('Management PWD', 'Mgt. PWD');
+  root.querySelectorAll('[placeholder]').forEach((item) => { item.placeholder = item.placeholder.replaceAll('Password', 'PWD').replaceAll('password', 'PWD').replaceAll('Management PWD', 'Mgt. PWD'); });
 }
 
 async function requestPasswordReset() {
@@ -60,11 +61,25 @@ async function login(event) {
   try {
     const data = await request('/api/auth/login', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(form))) });
     if (data.user.role !== expectedRole) throw new Error('Use the correct role portal for this account');
-    token = data.token; currentUser = data.user; sessionStorage.setItem(`token:${expectedRole}`, token); await renderDashboard();
+    token = data.token; currentUser = data.user; sessionStorage.setItem(`token:${expectedRole}`, token);
+    if (currentUser.mustChangePassword) return showRequiredPasswordChange();
+    await renderDashboard();
   } catch (error) {
     form.querySelector('.error').textContent = error.message;
     submit.disabled = false;
   }
+}
+
+function showRequiredPasswordChange() {
+  document.querySelector('main').innerHTML = `<section class="login card"><div class="compact-panel-title"><strong>${expectedRole.replaceAll('_', ' ')}</strong></div><h1>Set New PWD</h1><form id="required-password-form"><label>New PWD<input name="newPassword" type="password" minlength="8" autocomplete="new-password" required></label><label>Confirm New PWD<input name="confirmPassword" type="password" minlength="8" autocomplete="new-password" required></label><button>Save New PWD</button><p class="error"></p></form></section>`;
+  document.querySelector('#required-password-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(event.currentTarget));
+    if (values.newPassword !== values.confirmPassword) { event.currentTarget.querySelector('.error').textContent = 'PWDs do not match'; return; }
+    try { await request('/api/me/password', { method: 'PUT', body: JSON.stringify({ newPassword: values.newPassword }) }); sessionStorage.removeItem(`token:${expectedRole}`); token = null; showLogin('New PWD saved. Sign in again.'); }
+    catch (error) { form.querySelector('.error').textContent = error.message; }
+  });
 }
 
 async function renderDashboard() {
@@ -240,7 +255,8 @@ function usersPanel(users) {
   const showSchemes = expectedRole === 'SUPER_ADMIN';
   const showCommission = ['SUPER_ADMIN', 'DISTRIBUTOR'].includes(expectedRole);
   const resetColumn = expectedRole === 'SUPER_ADMIN';
-  return `<article class="card ${showSchemes || showCommission ? 'wide' : ''}"><h2>Direct network</h2>${users.length ? `<table><thead><tr><th>User ID</th><th>Name</th><th>Role</th>${showSchemes ? '<th>Lot Codes</th><th>Assigned schemes</th>' : ''}${showCommission ? '<th>Commission %</th>' : ''}<th>Status</th>${resetColumn ? '<th>Reset Password</th>' : ''}</tr></thead><tbody>${users.map((user) => `<tr><td>${escapeHtml(user.sellerCode ?? user.superAdminCode ?? '-')}</td><td>${escapeHtml(user.name)}</td><td>${user.role.replaceAll('_', ' ')}</td>${showSchemes ? `<td>${formatLotCodes(user.lotCodeIds ?? (user.lotCodeId ? [user.lotCodeId] : []))}</td><td>${formatDistributorAssignments(user)}</td>` : ''}${showCommission ? `<td>${user.role === 'SELLER' ? `<form class="seller-commission-form"><input type="hidden" name="sellerId" value="${escapeHtml(user.id)}"><input name="commissionPercentage" type="number" min="0" max="50" step="0.01" value="${Number(user.commissionPercentage ?? 0)}" required>${expectedRole === 'SUPER_ADMIN' ? '<input name="actionPassword" type="password" placeholder="Management Password" required>' : ''}<button>Save</button></form>` : '-'}</td>` : ''}<td>${user.isActive ? 'Active' : 'Disabled'}</td>${resetColumn ? `<td><form class="user-password-reset-form"><input type="hidden" name="userId" value="${escapeHtml(user.id)}"><input name="newPassword" type="password" minlength="8" autocomplete="new-password" placeholder="New password" required><input name="actionPassword" type="password" autocomplete="off" placeholder="Management Password" required><button>Reset</button></form></td>` : ''}</tr>`).join('')}</tbody></table>` : '<p class="muted">No direct accounts yet.</p>'}</article>`;
+  const rows = users.map((user) => `<tr><td>${escapeHtml(user.sellerCode ?? user.superAdminCode ?? '-')}</td><td>${escapeHtml(user.name)}</td><td>${user.role.replaceAll('_', ' ')}</td>${showSchemes ? `<td>${formatLotCodes(user.lotCodeIds ?? (user.lotCodeId ? [user.lotCodeId] : []))}</td><td>${formatDistributorAssignments(user)}</td>` : ''}${showCommission ? `<td>${user.role === 'SELLER' ? `<form class="seller-commission-form"><input type="hidden" name="sellerId" value="${escapeHtml(user.id)}"><input name="commissionPercentage" type="number" min="0" max="50" step="0.01" value="${Number(user.commissionPercentage ?? 0)}" required>${expectedRole === 'SUPER_ADMIN' ? '<input name="actionPassword" type="password" placeholder="Mgt. PWD" required>' : ''}<button>Save</button></form>` : '-'}</td>` : ''}<td>${user.isActive ? 'Active' : 'Disabled'}</td>${resetColumn ? `<td>${user.passwordResetPending ? `<form class="user-password-reset-form"><input type="hidden" name="userId" value="${escapeHtml(user.id)}"><button>Reset</button></form>` : '—'}</td>` : ''}</tr>`).join('');
+  return `<article class="card ${showSchemes || showCommission ? 'wide' : ''}"><h2>Direct network</h2>${users.length ? `<table><thead><tr><th>User ID</th><th>Name</th><th>Role</th>${showSchemes ? '<th>Lot Codes</th><th>Assigned schemes</th>' : ''}${showCommission ? '<th>Commission %</th>' : ''}<th>Status</th>${resetColumn ? '<th>Reset PWD</th>' : ''}</tr></thead><tbody>${rows}</tbody></table>` : '<p class="muted">No direct accounts yet.</p>'}</article>`;
 }
 function changePasswordPanel() {
   return `<article class="card wide"><p class="muted">ACCOUNT SECURITY</p><h2>Change Password</h2><form id="change-password-form" class="catalog-form"><label>Current Password<input name="currentPassword" type="password" autocomplete="current-password" required></label><label>New Password<input name="newPassword" type="password" minlength="8" autocomplete="new-password" required></label><button>Change Password</button></form><p class="muted">Sign in again after changing the password.</p></article>`;
@@ -290,7 +306,7 @@ function formatCatalogSchemeRates(rates = {}, catalog = []) {
   return rows.length ? rows.join(' ') : '<span class="muted">Common schemes only</span>';
 }
 function formatLotCodes(ids = []) {
-  return ids.map((id) => escapeHtml(currentDashboard.boards.find((item) => item.id === id)?.code ?? id)).join(', ') || '-';
+  return ids.map((id) => { const code = currentDashboard.boards.find((item) => item.id === id)?.code ?? id; return `<span class="lot-badge lot-${String(code).toLowerCase()}">${escapeHtml(code)}</span>`; }).join(' ') || '-';
 }
 function formatDistributorAssignments(user) {
   const rows = [];
@@ -298,7 +314,7 @@ function formatDistributorAssignments(user) {
     const code = currentDashboard.boards.find((item) => item.id === lotId)?.code ?? lotId;
     for (const [schemeId, item] of Object.entries(rates)) {
       const scheme = currentDashboard.schemeCatalog.find((entry) => entry.id === schemeId);
-      if (item.enabled) rows.push(`<span class="rate-tag">${escapeHtml(code)} · ${escapeHtml(scheme?.name ?? schemeId)}</span>`);
+      if (item.enabled) rows.push(`<span class="rate-tag lot-${String(code).toLowerCase()}">${escapeHtml(code)} · ${escapeHtml(scheme?.name ?? schemeId)}</span>`);
     }
   }
   return rows.length ? rows.join(' ') : '<span class="muted">Common schemes only</span>';
@@ -645,7 +661,7 @@ function wireActions() {
   });
   document.querySelectorAll('.user-password-reset-form').forEach((form) => form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    try { await request('/api/users/password-reset', { method: 'PUT', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); notify('User password reset. Their old sessions are closed.'); event.currentTarget.reset(); }
+    try { await request('/api/users/password-reset', { method: 'PUT', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); await renderDashboard(); switchPanel('direct-sellers'); notify('Temporary PWD: 12345678. New PWD required at next login.'); }
     catch (error) { notify(error.message, true); }
   }));
   document.querySelector('#renewal-request-form')?.addEventListener('submit', async (event) => {
@@ -776,6 +792,7 @@ function loadDirectSellerSettings(preserveLot = false) {
   const lotCode = document.querySelector('#direct-seller-lot-code');
   if (lotCode && !preserveLot) lotCode.value = seller?.lotCodeIds?.[0] ?? currentDashboard.boards[0]?.id ?? '';
   const selectedLot = lotCode?.value;
+  if (lotCode) { lotCode.classList.toggle('lot-kl', selectedLot === 'kerala'); lotCode.classList.toggle('lot-dr', selectedLot === 'dear'); }
   const lotEnabled = document.querySelector('#seller-lot-enabled');
   if (lotEnabled) { lotEnabled.checked = seller ? Boolean(seller.lotCodeIds?.includes(selectedLot)) : true; lotEnabled.disabled = !seller; }
   document.querySelectorAll('.direct-seller-scheme').forEach((label) => {

@@ -33,14 +33,29 @@ async function login(event) {
   try {
     const result = await request('/api/auth/login', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) });
     if (result.user.role !== 'OWNER') throw new Error('System Owner account required');
-    token = result.token; sessionStorage.setItem('token:OWNER', token); await render();
+    token = result.token; sessionStorage.setItem('token:OWNER', token);
+    if (result.user.mustChangePassword) return requiredPasswordScreen();
+    await render();
   } catch (error) { loginScreen(error.message); }
 }
+
+function requiredPasswordScreen() {
+  app.innerHTML = `<section class="login card"><div class="compact-panel-title"><strong>System Owner</strong></div><h1>Set New PWD</h1><form id="required-owner-password"><label>New PWD<input name="newPassword" type="password" minlength="8" required></label><label>Confirm New PWD<input name="confirmPassword" type="password" minlength="8" required></label><button>Save New PWD</button><p class="error"></p></form></section>`;
+  document.querySelector('#required-owner-password').addEventListener('submit', async (event) => {
+    const form = event.currentTarget;
+    event.preventDefault(); const values = Object.fromEntries(new FormData(event.currentTarget));
+    if (values.newPassword !== values.confirmPassword) { event.currentTarget.querySelector('.error').textContent = 'PWDs do not match'; return; }
+    try { await request('/api/me/password', { method: 'PUT', body: JSON.stringify({ newPassword: values.newPassword }) }); sessionStorage.removeItem('token:OWNER'); token = null; loginScreen('New PWD saved. Sign in again.'); }
+    catch (error) { form.querySelector('.error').textContent = error.message; }
+  });
+}
+
 
 function adminCard(item) {
   const created = new Date(item.createdAt).toLocaleDateString('en-IN', { month: '2-digit', year: 'numeric' });
   const rows = [['Today', item.financials.today], ['This Week', item.financials.week], ['This Month', item.financials.month]].map(([label, report]) => `<tr><td>${label}</td><td>${report.entries}</td><td>${report.quantity}</td><td>${money(report.sales)}</td><td>${money(report.prizes)}</td><td>${money(report.bonus)}</td><td class="${report.netProfit < 0 ? 'error' : ''}"><strong>${money(report.netProfit)}</strong></td></tr>`).join('');
-  return `<article class="card wide"><h2>${escapeHtml(item.superAdminCode)} · ${escapeHtml(item.name)}</h2><p class="muted">Phone: ${escapeHtml(item.phone)} · Created: ${created} · ${item.isActive ? 'Active' : 'Disabled'}</p><p><strong>Seller IDs: ${item.totalSellersCreated}</strong> · Active ${item.currentSellers} · Limit ${item.sellerLimit} · Remaining ${item.remaining}</p><div class="table-wrap"><table><thead><tr><th>Period</th><th>Entries</th><th>Qty</th><th>Sales</th><th>Prize</th><th>Bonus</th><th>Profit / Loss</th></tr></thead><tbody>${rows}</tbody></table></div><p class="muted">Today ${item.financials.periods.today} · Week ${item.financials.periods.weekStart} to ${item.financials.periods.weekEnd} · Month ${item.financials.periods.month}</p><form class="admin-limit-form"><input name="superAdminId" type="hidden" value="${escapeHtml(item.id)}"><label>Seller Limit<input name="sellerLimit" type="number" min="${item.currentSellers}" max="100000" value="${item.sellerLimit}" required></label><label>Owner PWD<input name="ownerPassword" type="password" required></label><button>Update Limit</button></form><form class="admin-password-reset-form"><input name="superAdminId" type="hidden" value="${escapeHtml(item.id)}"><label>New PWD<input name="newPassword" type="password" minlength="8" required></label><label>Owner PWD<input name="ownerPassword" type="password" required></label><button>Reset Super Admin PWD</button></form></article>`;
+  const reset = item.passwordResetPending ? `<form class="admin-password-reset-form"><input name="superAdminId" type="hidden" value="${escapeHtml(item.id)}"><button>Reset PWD</button></form><p class="muted">Temporary PWD: 12345678</p>` : '';
+  return `<article class="card wide"><h2>${escapeHtml(item.superAdminCode)} · ${escapeHtml(item.name)}</h2><p class="muted">Phone: ${escapeHtml(item.phone)} · Created: ${created} · ${item.isActive ? 'Active' : 'Disabled'}</p><p><strong>Seller IDs: ${item.totalSellersCreated}</strong> · Active ${item.currentSellers} · Limit ${item.sellerLimit} · Remaining ${item.remaining}</p><div class="table-wrap"><table><thead><tr><th>Period</th><th>Entries</th><th>Qty</th><th>Sales</th><th>Prize</th><th>Bonus</th><th>Profit / Loss</th></tr></thead><tbody>${rows}</tbody></table></div><p class="muted">Today ${item.financials.periods.today} · Week ${item.financials.periods.weekStart} to ${item.financials.periods.weekEnd} · Month ${item.financials.periods.month}</p><form class="admin-limit-form"><input name="superAdminId" type="hidden" value="${escapeHtml(item.id)}"><label>Seller Limit<input name="sellerLimit" type="number" min="${item.currentSellers}" max="100000" value="${item.sellerLimit}" required></label><label>Owner PWD<input name="ownerPassword" type="password" required></label><button>Update Limit</button></form>${reset}</article>`;
 }
 
 function validityBadge(item) {
@@ -171,4 +186,9 @@ function showMessage(message, isError = false) {
   element.classList.toggle('error', isError);
 }
 
-if (token) render(); else loginScreen();
+async function bootOwner() {
+  if (!token) return loginScreen();
+  try { const me = await request('/api/me'); if (me.mustChangePassword) return requiredPasswordScreen(); await render(); }
+  catch (error) { sessionStorage.removeItem('token:OWNER'); token = null; loginScreen(error.message); }
+}
+bootOwner();
