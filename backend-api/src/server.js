@@ -45,7 +45,6 @@ const routes = {
     const identifier = normalizeAccountIdentifier(body.phone ?? body.userId);
     const account = store.users.find((item) => item.isActive && [item.phone, item.superAdminCode, item.sellerCode].some((value) => normalizeAccountIdentifier(value) === identifier));
     if (!account || !verifyPassword(body.password ?? '', account.passwordHash)) return fail(401, 'User ID / Phone or PWD is incorrect');
-    if (account.role === 'SELLER' && process.env.NODE_ENV === 'production' && !isAndroidSellerRequest(req)) return fail(403, 'Seller Entry is available only in the Android app');
     return ok({ token: createToken(account), user: publicUser(account) });
   },
   'POST /api/auth/forgot-password': ({ body }) => {
@@ -1410,7 +1409,6 @@ function authenticate(req) {
   if (!account || !account.isActive || Number(account.sessionVersion ?? 0) !== claims.sessionVersion) { const error = new Error('Session expired. Sign in again'); error.status = 401; throw error; }
   return claims;
 }
-function isAndroidSellerRequest(req) { return /^number-game-seller-android\//.test(String(req.headers['x-seller-client'] ?? '')); }
 function buildPublicResultSlots(resultDate) {
   return store.settings.boards
     .filter((board) => board.enabled && ['KL', 'DR'].includes(board.code))
@@ -1454,13 +1452,11 @@ const server = http.createServer(async (req, res) => {
       if (url.pathname === '/api/auth/login') enforceLoginRateLimit(req);
       const body = ['POST', 'PUT', 'PATCH'].includes(req.method) ? await readJson(req) : {};
       const user = ['/api/auth/login', '/api/auth/forgot-password', '/api/public-results', '/api/public-result-history', '/health'].includes(url.pathname) ? null : authenticate(req);
-      if (user?.role === 'SELLER' && process.env.NODE_ENV === 'production' && !isAndroidSellerRequest(req)) return send(res, 403, { error: 'Seller Entry is available only in the Android app' });
       const result = await handler({ body, user, url, req });
       if (['POST', 'PUT', 'PATCH'].includes(req.method) && result.status < 400 && !['/api/auth/login', '/api/reports/result-preview'].includes(url.pathname)) persistStore();
       return send(res, result.status, result.body);
     }
     if (req.method === 'GET') {
-      if (process.env.NODE_ENV === 'production' && url.pathname === '/seller') return send(res, 403, { error: 'Seller Entry is available only in the Android app' });
       return serveStatic(url.pathname, res);
     }
     send(res, 404, { error: 'Route not found' });

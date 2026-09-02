@@ -1,6 +1,6 @@
 # Number Game Seller — Android
 
-The Seller Entry client is Android-only in production. Super Admin and Distributor remain web panels.
+Seller Entry is available from both the signed Android app and the Web Seller panel in production. Both clients may use the same Seller ID at the same time and save into the same account reports.
 
 ## Features
 
