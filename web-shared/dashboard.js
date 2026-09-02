@@ -801,6 +801,7 @@ function selectAllDistributorSchemes(event) {
   scope.querySelectorAll('.catalog-rate:not(.hidden) input[type="checkbox"]:not(:disabled)').forEach((input) => { input.checked = true; });
 }
 function updateLotCodeSchemeSelection() {
+  if (!document.querySelector('#board-config-form')) return;
   const selectedId = document.querySelector('#config-lot-code')?.value;
   const lotCode = currentDashboard.boards.find((item) => item.id === selectedId);
   const isKerala = lotCode?.code === 'KL';
