@@ -22,14 +22,15 @@ persistStore();
 const routes = {
   'GET /health': () => ok({ status: 'ok', service: 'number-game-api' }),
   'POST /api/auth/login': ({ body, req }) => {
-    const account = store.users.find((item) => item.phone === String(body.phone) && item.isActive);
-    if (!account || !verifyPassword(body.password ?? '', account.passwordHash)) return fail(401, 'Phone number or password is incorrect');
+    const identifier = String(body.phone ?? body.userId ?? '').trim().toUpperCase();
+    const account = store.users.find((item) => item.isActive && [item.phone, item.superAdminCode, item.sellerCode].some((value) => String(value ?? '').toUpperCase() === identifier));
+    if (!account || !verifyPassword(body.password ?? '', account.passwordHash)) return fail(401, 'User ID / Phone or PWD is incorrect');
     if (account.role === 'SELLER' && process.env.NODE_ENV === 'production' && !isAndroidSellerRequest(req)) return fail(403, 'Seller Entry is available only in the Android app');
     return ok({ token: createToken(account), user: publicUser(account) });
   },
   'POST /api/auth/forgot-password': ({ body }) => {
-    const phone = String(body.phone ?? '').trim();
-    const account = store.users.find((item) => item.phone === phone && item.isActive && ['SELLER', 'SUPER_ADMIN', 'OWNER'].includes(item.role));
+    const identifier = String(body.phone ?? body.userId ?? '').trim().toUpperCase();
+    const account = store.users.find((item) => item.isActive && ['SELLER', 'SUPER_ADMIN', 'OWNER'].includes(item.role) && [item.phone, item.superAdminCode, item.sellerCode].some((value) => String(value ?? '').toUpperCase() === identifier));
     if (account) {
       const existing = store.passwordResetRequests.find((item) => item.userId === account.id && item.status === 'PENDING');
       if (!existing) createRecord('passwordResetRequests', { userId: account.id, phone: account.phone, role: account.role, parentId: account.parentId, status: 'PENDING' });
@@ -295,7 +296,7 @@ const routes = {
     schemeRates = deriveNumberTypeRates(distributorAccess.catalogSchemeRates);
     const commissionPercentage = body.role === 'SELLER' ? Number(body.commissionPercentage ?? 0) : 0;
     if (body.role === 'SELLER' && (!Number.isFinite(commissionPercentage) || commissionPercentage < 0 || commissionPercentage > 50)) return fail(400, 'Seller commission percentage must be between 0 and 50');
-    const record = createRecord('users', { parentId: user.id, role: 'SELLER', name: body.name.trim(), phone: String(body.phone), passwordHash: hashPassword(body.password), isActive: true, commissionPercentage, schemeRates, lotCodeGraceMinutes: { [distributorAccess.lotCodeId]: validateGraceMinutes(body.graceMinutes) }, ...distributorAccess });
+    const record = createRecord('users', { parentId: user.id, role: 'SELLER', sellerCode: nextSellerCode(user.id), name: body.name.trim(), phone: String(body.phone), passwordHash: hashPassword(body.password), isActive: true, commissionPercentage, schemeRates, lotCodeGraceMinutes: { [distributorAccess.lotCodeId]: validateGraceMinutes(body.graceMinutes) }, ...distributorAccess });
     audit(user.id, 'USER_CREATED', 'user', record.id, { role: record.role });
     return created(publicUser(record));
   },
@@ -1208,11 +1209,18 @@ function requireOwnerPassword(body, user) {
 function nextSuperAdminCode() {
   const date = new Date();
   const year = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Kolkata', year: '2-digit' }).format(date);
-  const month = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Kolkata', month: '2-digit' }).format(date);
-  const prefix = `${year}${month}`;
-  const maximum = store.users.filter((item) => item.role === 'SUPER_ADMIN' && String(item.superAdminCode ?? '').startsWith(prefix)).reduce((max, item) => Math.max(max, Number(String(item.superAdminCode).slice(4)) || 0), 0);
-  if (maximum >= 9999) { const error = new Error('This month Super Admin ID sequence is full'); error.status = 409; throw error; }
-  return `${prefix}${String(maximum + 1).padStart(4, '0')}`;
+  const maximum = store.users.filter((item) => item.role === 'SUPER_ADMIN').reduce((max, item) => Math.max(max, Number(String(item.superAdminCode ?? '').slice(-4)) || 0), 0);
+  if (maximum >= 99) { const error = new Error('The 5-digit Seller ID format supports a maximum of 99 Super Admin accounts'); error.status = 409; throw error; }
+  return `SA${year}${String(maximum + 1).padStart(4, '0')}`;
+}
+function nextSellerCode(superAdminId) {
+  const admin = store.users.find((item) => item.id === superAdminId && item.role === 'SUPER_ADMIN');
+  const adminSequence = Number(String(admin?.superAdminCode ?? '').slice(-4));
+  if (!admin || !Number.isInteger(adminSequence) || adminSequence < 1 || adminSequence > 99) { const error = new Error('Super Admin ID does not support a 5-digit Seller ID'); error.status = 409; throw error; }
+  const prefix = String(adminSequence).padStart(2, '0');
+  const maximum = store.users.filter((item) => item.role === 'SELLER' && item.parentId === superAdminId && String(item.sellerCode ?? '').startsWith(prefix)).reduce((max, item) => Math.max(max, Number(String(item.sellerCode).slice(2)) || 0), 0);
+  if (maximum >= 999) { const error = new Error('This Super Admin has used all 999 Seller IDs'); error.status = 409; throw error; }
+  return `${prefix}${String(maximum + 1).padStart(3, '0')}`;
 }
 function requireActionPassword(body, user, type) {
   const account = store.users.find((item) => item.id === user.id);

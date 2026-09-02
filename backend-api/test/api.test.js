@@ -23,6 +23,8 @@ test('NGS direct Seller workflow', async (context) => {
   const admin = await login('9000000001', 'Admin@123');
   const seller = await login('9000000004', 'Seller@123');
   const owner = await login('9000000000', 'Owner@123');
+  await login('SA260001', 'Admin@123');
+  await login('01001', 'Seller@123');
 
   const retiredDistributor = await json('/api/users', admin, { method: 'POST', body: JSON.stringify({ role: 'DISTRIBUTOR', name: 'Blocked Distributor', phone: '9111111111', password: 'Welcome@123', actionPassword: 'Admin@123' }) });
   assert.equal(retiredDistributor.response.status, 403);
@@ -31,6 +33,7 @@ test('NGS direct Seller workflow', async (context) => {
   assert.equal(directSeller.response.status, 201);
   assert.equal(directSeller.data.parentId, 'admin-1');
   assert.equal(directSeller.data.role, 'SELLER');
+  assert.equal(directSeller.data.sellerCode, '01002');
   assert.deepEqual(directSeller.data.lotCodeIds, ['kerala']);
   assert.equal(directSeller.data.commissionPercentage, 20);
 
@@ -46,7 +49,7 @@ test('NGS direct Seller workflow', async (context) => {
   assert.equal(ownerControl.response.status, 200);
   assert.equal(ownerControl.data.currentSellers, 2);
   const primaryAdminReport = ownerControl.data.superAdmins.find((item) => item.id === 'admin-1');
-  assert.match(primaryAdminReport.superAdminCode, /^\d{8}$/);
+  assert.equal(primaryAdminReport.superAdminCode, 'SA260001');
   assert.equal(primaryAdminReport.totalSellersCreated, 2);
   assert.equal(typeof primaryAdminReport.financials.today.netProfit, 'number');
   assert.deepEqual(Object.keys(primaryAdminReport.financials).sort(), ['month', 'periods', 'today', 'week']);
@@ -54,8 +57,8 @@ test('NGS direct Seller workflow', async (context) => {
   const newAdminTwo = await json('/api/owner/super-admin', owner, { method: 'POST', body: JSON.stringify({ name: 'Branch Admin Two', phone: '9777777772', password: 'Branch@124', sellerLimit: 5, validityMonths: 12, ownerPassword: 'Owner@123' }) });
   assert.equal(newAdminOne.response.status, 201);
   assert.equal(newAdminTwo.response.status, 201);
-  assert.match(newAdminOne.data.superAdminCode, /^\d{8}$/);
-  assert.equal(Number(newAdminTwo.data.superAdminCode), Number(newAdminOne.data.superAdminCode) + 1);
+  assert.equal(newAdminOne.data.superAdminCode, 'SA260002');
+  assert.equal(newAdminTwo.data.superAdminCode, 'SA260003');
   const sellerLimit = await json('/api/owner/seller-limit', owner, { method: 'PUT', body: JSON.stringify({ superAdminId: 'admin-1', sellerLimit: 2, ownerPassword: 'Owner@123' }) });
   assert.equal(sellerLimit.response.status, 200);
   assert.equal(sellerLimit.data.remaining, 0);
@@ -66,6 +69,8 @@ test('NGS direct Seller workflow', async (context) => {
   const branchSeller = await json('/api/users', branchAdmin, { method: 'POST', body: JSON.stringify({ role: 'SELLER', name: 'Branch Seller', phone: '9777777781', password: 'Seller@321', lotCodeId: 'kerala', catalogSchemeRates: { 'scheme-a': { enabled: true, rate: 10.6 } }, commissionPercentage: 0, actionPassword: 'Branch@123' }) });
   assert.equal(branchSeller.response.status, 201);
   assert.equal(branchSeller.data.parentId, newAdminOne.data.id);
+  assert.equal(branchSeller.data.sellerCode, '02001');
+  await login('02001', 'Seller@321');
   const branchOverLimit = await json('/api/users', branchAdmin, { method: 'POST', body: JSON.stringify({ role: 'SELLER', name: 'Branch Seller Two', phone: '9777777782', password: 'Seller@322', lotCodeId: 'kerala', catalogSchemeRates: { 'scheme-a': { enabled: true, rate: 10.6 } }, commissionPercentage: 0, actionPassword: 'Branch@123' }) });
   assert.equal(branchOverLimit.response.status, 409);
 

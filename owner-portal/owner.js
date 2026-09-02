@@ -12,7 +12,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character
 const money = (value) => `₹${Number(value ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
 function loginScreen(message = '') {
-  app.innerHTML = `<section class="login card"><div class="compact-panel-title"><strong>System Owner</strong></div><h1>Login</h1><form id="owner-login"><label>Phone<input name="phone" inputmode="numeric" required></label><label>PWD<input name="password" type="password" required></label><button>Sign in</button><button type="button" class="secondary" id="owner-forgot-password">Forgot PWD</button><p class="error">${escapeHtml(message)}</p></form></section>`;
+  app.innerHTML = `<section class="login card"><div class="compact-panel-title"><strong>System Owner</strong></div><h1>Login</h1><form id="owner-login"><label>User ID / Phone<input name="phone" autocomplete="username" required></label><label>PWD<input name="password" type="password" required></label><button>Sign in</button><button type="button" class="secondary" id="owner-forgot-password">Forgot PWD</button><p class="error">${escapeHtml(message)}</p></form></section>`;
   document.querySelector('#owner-login').addEventListener('submit', login);
   document.querySelector('#owner-forgot-password').addEventListener('click', requestOwnerPasswordReset);
 }

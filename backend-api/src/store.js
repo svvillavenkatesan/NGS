@@ -99,22 +99,38 @@ if (process.env.NODE_ENV === 'production') {
     account.sessionVersion = Number(account.sessionVersion ?? 0) + 1;
   }
 }
-const usedSuperAdminCodes = new Set(store.users.filter((item) => item.role === 'SUPER_ADMIN' && /^\d{8}$/.test(String(item.superAdminCode ?? ''))).map((item) => item.superAdminCode));
-for (const account of store.users.filter((item) => item.role === 'SUPER_ADMIN')) {
+const superAdminsByCreation = store.users.filter((item) => item.role === 'SUPER_ADMIN').sort((a, b) => String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')) || String(a.id).localeCompare(String(b.id)));
+const usedSuperAdminCodes = new Set();
+const usedSuperAdminSequences = new Set();
+let superAdminSequence = 0;
+for (const account of superAdminsByCreation) {
   account.parentId ??= 'owner-1';
   account.sellerLimit ??= Number(store.settings.maxSellers ?? 2000);
-  if (!/^\d{8}$/.test(String(account.superAdminCode ?? ''))) {
-    const date = new Date(account.createdAt ?? Date.now());
-    const year = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Kolkata', year: '2-digit' }).format(date);
-    const month = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Kolkata', month: '2-digit' }).format(date);
-    const prefix = `${year}${month}`;
-    let sequence = 1;
-    while (usedSuperAdminCodes.has(`${prefix}${String(sequence).padStart(4, '0')}`)) sequence += 1;
-    account.superAdminCode = `${prefix}${String(sequence).padStart(4, '0')}`;
-    usedSuperAdminCodes.add(account.superAdminCode);
-  }
+  const existingSequence = /^SA\d{2}(\d{4})$/.exec(String(account.superAdminCode ?? ''));
+  let sequence = Number(existingSequence?.[1] ?? 0);
+  if (!sequence || usedSuperAdminSequences.has(sequence) || usedSuperAdminCodes.has(account.superAdminCode)) sequence = superAdminSequence + 1;
+  superAdminSequence = Math.max(superAdminSequence, sequence);
+  const date = new Date(account.createdAt ?? Date.now());
+  const year = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Kolkata', year: '2-digit' }).format(date);
+  account.superAdminCode = `SA${year}${String(sequence).padStart(4, '0')}`;
+  usedSuperAdminCodes.add(account.superAdminCode);
+  usedSuperAdminSequences.add(sequence);
   account.resultPasswordHash ??= account.id === 'admin-1' ? store.security.resultPasswordHash : null;
   account.managementPasswordHash ??= account.id === 'admin-1' ? store.security.managementPasswordHash : null;
+}
+for (const admin of superAdminsByCreation) {
+  const adminSequence = Number(String(admin.superAdminCode).slice(-4));
+  const sellers = store.users.filter((item) => item.role === 'SELLER' && item.parentId === admin.id).sort((a, b) => String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')) || String(a.id).localeCompare(String(b.id)));
+  const usedSellerCodes = new Set();
+  let sellerSequence = 0;
+  for (const seller of sellers) {
+    const existingSequence = /^(\d{2})(\d{3})$/.exec(String(seller.sellerCode ?? ''));
+    let sequence = Number(existingSequence?.[1] === String(adminSequence).padStart(2, '0') ? existingSequence[2] : 0);
+    if (!sequence || usedSellerCodes.has(seller.sellerCode)) sequence = sellerSequence + 1;
+    sellerSequence = Math.max(sellerSequence, sequence);
+    seller.sellerCode = `${String(adminSequence).padStart(2, '0')}${String(sequence).padStart(3, '0')}`;
+    usedSellerCodes.add(seller.sellerCode);
+  }
 }
 store.saleReports ??= [];
 store.reportCorrections ??= [];

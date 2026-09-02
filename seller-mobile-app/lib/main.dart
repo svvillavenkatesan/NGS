@@ -86,9 +86,9 @@ class _Login extends State<Login> {
                   const SizedBox(height: 12),
                   TextField(
                       controller: phone,
-                      keyboardType: TextInputType.phone,
+                      keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
-                          labelText: 'Phone', border: OutlineInputBorder())),
+                          labelText: 'User ID / Phone', border: OutlineInputBorder())),
                   const SizedBox(height: 14),
                   TextField(
                       controller: password,
