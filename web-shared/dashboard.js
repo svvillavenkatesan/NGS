@@ -839,7 +839,6 @@ function addToBill(event) {
   const numbers = values.boxEntry === 'on' ? uniqueNumberPermutations(values.number) : [values.number];
   const targetIds = values.catalogSchemeId === 'scheme-all-single' ? ['scheme-a', 'scheme-b', 'scheme-c'] : values.catalogSchemeId === 'scheme-all-doubles' ? ['scheme-ab', 'scheme-ac', 'scheme-bc'] : [values.catalogSchemeId];
   const targets = targetIds.map((id) => currentDashboard.schemeCatalog.find((item) => item.id === id)).filter(Boolean);
-  if (saleCart.length + numbers.length * targets.length > 100) { notify('A bill can contain maximum 100 entries. Settle the current bill first.', true); return; }
   for (const targetCatalog of targets) for (const number of numbers) {
     const targetScheme = ['A', 'B', 'C'].includes(targetCatalog.pattern) ? 'ONE_DIGIT_STANDARD' : ['AB', 'AC', 'BC'].includes(targetCatalog.pattern) ? 'TWO_DIGIT_STANDARD' : values.scheme;
     const targetPrice = Number(targetCatalog.mrp ?? unitPrice);

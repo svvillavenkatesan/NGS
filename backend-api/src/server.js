@@ -474,7 +474,6 @@ const routes = {
     requireAccountOperational(user);
     const values = validateTicket(body, user);
     const expanded = expandBoxTicket(values, body.boxEntry).flatMap(expandAllSchemeTicket);
-    if (expanded.length > 100) return fail(400, 'A sale can contain maximum 100 expanded entries');
     const records = expanded.map((item) => createTicket(user.id, item));
     const bill = createBill(user.id, records);
     const total = records.reduce((sum, item) => sum + item.total, 0);
@@ -485,11 +484,10 @@ const routes = {
     requireOperationalLicense();
     requireRole(user, 'SELLER');
     requireAccountOperational(user);
-    if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 100) return fail(400, 'Bill must contain between 1 and 100 items');
+    if (!Array.isArray(body.items) || body.items.length < 1) return fail(400, 'Bill must contain at least one item');
     if (new Set(body.items.map((item) => item.boardId)).size !== 1) return fail(400, 'A bill can contain tickets from only one Lot Code');
     if (new Set(body.items.map((item) => item.showId ?? '')).size !== 1) return fail(400, 'A bill can contain tickets from only one Show');
     const values = body.items.flatMap((item) => expandBoxTicket(validateTicket(item, user), item.boxEntry).flatMap(expandAllSchemeTicket));
-    if (values.length > 100) return fail(400, 'A bill can contain maximum 100 expanded entries');
     const records = values.map((item) => createTicket(user.id, item));
     const bill = createBill(user.id, records);
     const total = records.reduce((sum, item) => sum + item.total, 0);

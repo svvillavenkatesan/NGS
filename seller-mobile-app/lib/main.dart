@@ -335,10 +335,6 @@ class _Entry extends State<Entry> {
     }
     final nums = box && length > 1 ? permutations(n) : [n];
     final ts = targets();
-    if (cart.length + nums.length * ts.length > 100) {
-      setState(() => note = 'Maximum 100 entries');
-      return;
-    }
     setState(() {
       for (final t in ts) {
         for (final value in nums) {

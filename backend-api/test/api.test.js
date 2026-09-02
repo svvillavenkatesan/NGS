@@ -91,6 +91,9 @@ test('NGS direct Seller workflow', async (context) => {
   assert.equal(sale.response.status, 201);
   assert.equal(sale.data.quantity, 5);
   assert.equal(sale.data.total, 105);
+  const unlimitedBatch = await json('/api/tickets/batch', directToken, { method: 'POST', body: JSON.stringify({ items: Array.from({ length: 101 }, (_, index) => ({ boardId: 'kerala', catalogSchemeId: 'scheme-a', number: String(index % 10), scheme: 'ONE_DIGIT_STANDARD', quantity: 1 })) }) });
+  assert.equal(unlimitedBatch.response.status, 201);
+  assert.equal(unlimitedBatch.data.itemCount, 101);
 
   const users = await json('/api/users', admin);
   assert.equal(users.response.status, 200);
