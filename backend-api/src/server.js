@@ -24,6 +24,27 @@ const normalizeAccountIdentifier = (value) =>
 
 const routes = {
   'GET /health': () => ok({ status: 'ok', service: 'number-game-api' }),
+  'GET /api/public-results': () => {
+    const resultDate = localDateKey(new Date().toISOString());
+    const results = store.settings.boards
+      .filter((board) => board.enabled && ['KL', 'DR'].includes(board.code))
+      .flatMap((board) => (board.schedules ?? [])
+        .filter((show) => show.enabled)
+        .map((show) => {
+          const draw = [...store.draws].reverse().find((item) => item.boardId === board.id && item.showId === show.id && item.resultDate === resultDate);
+          return {
+            boardCode: board.code,
+            boardName: board.name,
+            showId: show.id,
+            showLabel: show.label,
+            resultDate,
+            winningNumber: draw?.winningNumber ?? null,
+            status: draw ? 'PUBLISHED' : 'NOT PUBLISHED',
+            publishedAt: draw?.createdAt ?? null
+          };
+        }));
+    return ok({ brand: 'Golden Chance', resultDate, results, updatedAt: new Date().toISOString() });
+  },
   'POST /api/auth/login': ({ body, req }) => {
     const identifier = normalizeAccountIdentifier(body.phone ?? body.userId);
     const account = store.users.find((item) => item.isActive && [item.phone, item.superAdminCode, item.sellerCode].some((value) => normalizeAccountIdentifier(value) === identifier));
@@ -1283,11 +1304,15 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', ...corsHeaders() });
       res.write(`event: connected\ndata: ${JSON.stringify({ role: user.role })}\n\n`); clients.add(res); req.on('close', () => clients.delete(res)); return;
     }
+    if (req.method === 'GET' && url.pathname === '/api/public-events') {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', ...corsHeaders() });
+      res.write(`event: connected\ndata: ${JSON.stringify({ public: true })}\n\n`); clients.add(res); req.on('close', () => clients.delete(res)); return;
+    }
     const handler = routes[`${req.method} ${url.pathname}`];
     if (handler) {
       if (url.pathname === '/api/auth/login') enforceLoginRateLimit(req);
       const body = ['POST', 'PUT', 'PATCH'].includes(req.method) ? await readJson(req) : {};
-      const user = ['/api/auth/login', '/api/auth/forgot-password', '/health'].includes(url.pathname) ? null : authenticate(req);
+      const user = ['/api/auth/login', '/api/auth/forgot-password', '/api/public-results', '/health'].includes(url.pathname) ? null : authenticate(req);
       if (user?.role === 'SELLER' && process.env.NODE_ENV === 'production' && !isAndroidSellerRequest(req)) return send(res, 403, { error: 'Seller Entry is available only in the Android app' });
       const result = await handler({ body, user, url, req });
       if (['POST', 'PUT', 'PATCH'].includes(req.method) && result.status < 400 && !['/api/auth/login', '/api/reports/result-preview'].includes(url.pathname)) persistStore();
@@ -1302,7 +1327,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 async function serveStatic(pathname, res) {
-  const pages = { '/': 'admin-portal/index.html', '/owner': 'owner-portal/index.html', '/admin': 'admin-portal/index.html', '/seller': 'seller-portal/index.html' };
+  const pages = { '/': 'admin-portal/index.html', '/owner': 'owner-portal/index.html', '/admin': 'admin-portal/index.html', '/seller': 'seller-portal/index.html', '/results': 'public-results/index.html', '/golden-chance': 'public-results/index.html' };
   const relative = pages[pathname] ?? pathname.replace(/^\//, '');
   if (relative.includes('..') || !['.html', '.css', '.js'].includes(extname(relative))) return send(res, 404, { error: 'Not found' });
   try {
