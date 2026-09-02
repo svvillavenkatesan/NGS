@@ -15,13 +15,14 @@ const money = (value) => {
 };
 
 function loginScreen(message = '') {
-  app.innerHTML = `<section class="login card"><div class="compact-panel-title"><strong>System Owner</strong></div><h1>Login</h1><form id="owner-login"><label>User ID / Phone<input name="phone" autocomplete="username" required></label><label>PWD<input name="password" type="password" required></label><button>Sign in</button><button type="button" class="secondary" id="owner-forgot-password">Forgot PWD</button><p class="error">${escapeHtml(message)}</p></form></section>`;
+  app.innerHTML = `<section class="login card"><div class="compact-panel-title"><strong>System Owner</strong></div><h1>Login</h1><form id="owner-login" autocomplete="off" data-form-type="other"><label>User ID / Phone<input name="userId" autocomplete="off" data-lpignore="true" data-1p-ignore spellcheck="false" required></label><label>PWD<input name="password" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore required></label><button>Sign in</button><button type="button" class="secondary" id="owner-forgot-password">Forgot PWD</button><p class="error">${escapeHtml(message)}</p></form></section>`;
+  document.querySelector('#owner-login').reset();
   document.querySelector('#owner-login').addEventListener('submit', login);
   document.querySelector('#owner-forgot-password').addEventListener('click', requestOwnerPasswordReset);
 }
 
 async function requestOwnerPasswordReset() {
-  const phone = document.querySelector('#owner-login [name="phone"]').value.trim();
+  const phone = document.querySelector('#owner-login [name="userId"]').value.trim();
   if (!phone) return loginScreen('Enter Phone / User ID first');
   try { const result = await request('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ phone }) }); loginScreen(result.message); }
   catch (error) { loginScreen(error.message); }

@@ -27,10 +27,11 @@ async function boot() {
 
 function showLogin(error = '') {
   const loginTitle = { SUPER_ADMIN: 'Super Admin', DISTRIBUTOR: 'Distributor', SUB_DISTRIBUTOR: 'Distributor', SELLER: 'Seller' }[expectedRole] ?? 'Account';
-  document.querySelector('main').innerHTML = `<section class="login card"><div class="compact-panel-title"><strong>${loginTitle}</strong></div><h1>Login</h1><form id="login-form" autocomplete="off">
-    <label>User ID / Phone<input name="phone" autocomplete="username" value="" required></label>
-    <label>Password<input name="password" type="password" autocomplete="new-password" value="" required></label>
+  document.querySelector('main').innerHTML = `<section class="login card"><div class="compact-panel-title"><strong>${loginTitle}</strong></div><h1>Login</h1><form id="login-form" autocomplete="off" data-form-type="other">
+    <label>User ID / Phone<input name="userId" autocomplete="off" data-lpignore="true" data-1p-ignore value="" spellcheck="false" required></label>
+    <label>Password<input name="password" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore value="" required></label>
     <button>Sign in</button><button type="button" class="secondary" id="forgot-password">Forgot Password</button><p class="error">${error}</p></form></section>`;
+  document.querySelector('#login-form').reset();
   document.querySelector('#login-form').addEventListener('submit', login);
   document.querySelector('#forgot-password').addEventListener('click', requestPasswordReset);
   usePwdLabels(document.querySelector('main'));
@@ -45,7 +46,7 @@ function usePwdLabels(root) {
 }
 
 async function requestPasswordReset() {
-  const phone = document.querySelector('#login-form [name="phone"]').value.trim();
+  const phone = document.querySelector('#login-form [name="userId"]').value.trim();
   const message = document.querySelector('#login-form .error');
   if (!phone) { message.textContent = 'Enter Phone / User ID first'; return; }
   try { const result = await request('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ phone }) }); message.textContent = result.message; message.classList.remove('error'); }
