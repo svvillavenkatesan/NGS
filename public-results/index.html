@@ -18,6 +18,15 @@
       <div class="live"><i></i> LIVE</div>
     </header>
 
+    <section class="result-controls">
+      <label class="date-control"><span>SELECT RESULT DATE</span><input id="result-date-picker" type="date"></label>
+      <div class="display-date"><span>RESULT DATE</span><strong id="large-result-date">--/--/----</strong></div>
+      <div class="history-control">
+        <label><span>PDF HISTORY</span><select id="history-days"><option value="30">1 MONTH</option><option value="60">2 MONTHS</option><option value="90">3 MONTHS</option></select></label>
+        <button id="download-pdf" type="button">PDF / PRINT</button>
+      </div>
+    </section>
+
     <section class="result-grid" id="result-grid" aria-live="polite"></section>
 
     <footer>

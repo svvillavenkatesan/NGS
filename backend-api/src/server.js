@@ -24,26 +24,22 @@ const normalizeAccountIdentifier = (value) =>
 
 const routes = {
   'GET /health': () => ok({ status: 'ok', service: 'number-game-api' }),
-  'GET /api/public-results': () => {
-    const resultDate = localDateKey(new Date().toISOString());
-    const results = store.settings.boards
-      .filter((board) => board.enabled && ['KL', 'DR'].includes(board.code))
-      .flatMap((board) => (board.schedules ?? [])
-        .filter((show) => show.enabled)
-        .map((show) => {
-          const draw = [...store.draws].reverse().find((item) => item.boardId === board.id && item.showId === show.id && item.resultDate === resultDate);
-          return {
-            boardCode: board.code,
-            boardName: board.name,
-            showId: show.id,
-            showLabel: show.label,
-            resultDate,
-            winningNumber: draw?.winningNumber ?? null,
-            status: draw ? 'PUBLISHED' : 'NOT PUBLISHED',
-            publishedAt: draw?.createdAt ?? null
-          };
-        }));
+  'GET /api/public-results': ({ url }) => {
+    const today = localDateKey(new Date().toISOString());
+    const requestedDate = String(url.searchParams.get('date') ?? today);
+    const resultDate = /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) && requestedDate <= today ? requestedDate : today;
+    const results = buildPublicResultSlots(resultDate);
     return ok({ brand: 'Golden Chance', resultDate, results, updatedAt: new Date().toISOString() });
+  },
+  'GET /api/public-result-history': ({ url }) => {
+    const days = [30, 60, 90].includes(Number(url.searchParams.get('days'))) ? Number(url.searchParams.get('days')) : 30;
+    const today = localDateKey(new Date().toISOString());
+    const dates = Array.from({ length: days }, (_, index) => {
+      const date = new Date(`${today}T12:00:00Z`);
+      date.setUTCDate(date.getUTCDate() - index);
+      return date.toISOString().slice(0, 10);
+    });
+    return ok({ brand: 'Golden Chance', days, fromDate: dates.at(-1), toDate: dates[0], rows: dates.map((resultDate) => ({ resultDate, results: buildPublicResultSlots(resultDate) })) });
   },
   'POST /api/auth/login': ({ body, req }) => {
     const identifier = normalizeAccountIdentifier(body.phone ?? body.userId);
@@ -1290,6 +1286,26 @@ function authenticate(req) {
   return claims;
 }
 function isAndroidSellerRequest(req) { return /^number-game-seller-android\//.test(String(req.headers['x-seller-client'] ?? '')); }
+function buildPublicResultSlots(resultDate) {
+  return store.settings.boards
+    .filter((board) => board.enabled && ['KL', 'DR'].includes(board.code))
+    .flatMap((board) => (board.schedules ?? [])
+      .filter((show) => show.enabled)
+      .map((show) => {
+        const draw = [...store.draws].reverse().find((item) => item.boardId === board.id && item.showId === show.id && item.resultDate === resultDate);
+        return {
+          boardCode: board.code,
+          boardName: board.name,
+          showId: show.id,
+          showLabel: show.label,
+          resultDate,
+          winningNumber: draw?.winningNumber ?? null,
+          status: draw ? 'PUBLISHED' : 'NOT PUBLISHED',
+          publishedAt: draw?.createdAt ?? null
+        };
+      }));
+}
+
 function broadcast(message) { for (const client of clients) client.write(`event: ${message.event}\ndata: ${JSON.stringify(message)}\n\n`); }
 
 const server = http.createServer(async (req, res) => {
@@ -1312,7 +1328,7 @@ const server = http.createServer(async (req, res) => {
     if (handler) {
       if (url.pathname === '/api/auth/login') enforceLoginRateLimit(req);
       const body = ['POST', 'PUT', 'PATCH'].includes(req.method) ? await readJson(req) : {};
-      const user = ['/api/auth/login', '/api/auth/forgot-password', '/api/public-results', '/health'].includes(url.pathname) ? null : authenticate(req);
+      const user = ['/api/auth/login', '/api/auth/forgot-password', '/api/public-results', '/api/public-result-history', '/health'].includes(url.pathname) ? null : authenticate(req);
       if (user?.role === 'SELLER' && process.env.NODE_ENV === 'production' && !isAndroidSellerRequest(req)) return send(res, 403, { error: 'Seller Entry is available only in the Android app' });
       const result = await handler({ body, user, url, req });
       if (['POST', 'PUT', 'PATCH'].includes(req.method) && result.status < 400 && !['/api/auth/login', '/api/reports/result-preview'].includes(url.pathname)) persistStore();
