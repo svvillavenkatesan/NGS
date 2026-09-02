@@ -515,6 +515,81 @@ const routes = {
     return created({ bill: buildBill(bill), tickets: records, itemCount: records.length, quantity: records.reduce((sum, item) => sum + item.quantity, 0), total });
   },
   'GET /api/draws': () => ok([...store.draws].reverse()),
+  'GET /api/result-corrections': ({ user }) => {
+    requireRole(user, 'SUPER_ADMIN');
+    return ok(store.resultCorrectionRequests.filter((item) => item.requestedBy === user.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+  },
+  'POST /api/result-corrections': ({ body, user }) => {
+    requireRole(user, 'SUPER_ADMIN');
+    requireActionPassword(body, user, 'result');
+    const draw = store.draws.find((item) => item.id === String(body.drawId) && item.publishedBy === user.id && item.locked && item.status === 'PUBLISHED');
+    if (!draw) return fail(404, 'Select one of your published and locked Results');
+    const proposedWinningNumber = String(body.proposedWinningNumber ?? '');
+    if (!/^\d{4}$/.test(proposedWinningNumber)) return fail(400, 'Correct Result must contain four digits');
+    if (proposedWinningNumber === draw.winningNumber) return fail(400, 'Correct Result must be different from the published Result');
+    const reason = String(body.reason ?? '').trim();
+    if (reason.length < 5) return fail(400, 'Enter a clear correction reason');
+    if (store.resultCorrectionRequests.some((item) => item.drawId === draw.id && item.status === 'PENDING')) return fail(409, 'A correction request is already pending for this Result');
+    const preview = buildResultPreview(proposedWinningNumber, draw, true, user.id);
+    const requester = store.users.find((item) => item.id === user.id);
+    const request = createRecord('resultCorrectionRequests', { drawId: draw.id, requestedBy: user.id, superAdminCode: requester?.superAdminCode ?? '—', boardId: draw.boardId, boardCode: draw.boardCode, showId: draw.showId, showLabel: draw.showLabel, resultDate: draw.resultDate, oldWinningNumber: draw.winningNumber, proposedWinningNumber, reason, status: 'PENDING', preview: { ticketQuantity: preview.ticketQuantity, totalSales: preview.totalSales, totalPrizes: preview.totalPrizes, projectedProfit: preview.projectedProfit, profitPercentage: preview.profitPercentage } });
+    audit(user.id, 'RESULT_CORRECTION_REQUESTED', 'draw', draw.id, { requestId: request.id, oldWinningNumber: draw.winningNumber, proposedWinningNumber, reason });
+    return created(request);
+  },
+  'GET /api/owner/result-corrections': ({ user }) => {
+    requireRole(user, 'OWNER');
+    return ok([...store.resultCorrectionRequests].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((item) => ({ ...item, superAdminName: store.users.find((userItem) => userItem.id === item.requestedBy)?.name ?? '—' })));
+  },
+  'POST /api/owner/result-corrections/approve': ({ body, user }) => {
+    requireRole(user, 'OWNER');
+    requireOwnerPassword(body, user);
+    if (body.verified !== true && body.verified !== 'on') return fail(400, 'Confirm that the official Result was verified');
+    const request = store.resultCorrectionRequests.find((item) => item.id === String(body.requestId) && item.status === 'PENDING');
+    if (!request) return fail(404, 'Pending Result correction request not found');
+    const draw = store.draws.find((item) => item.id === request.drawId && item.locked && item.status === 'PUBLISHED');
+    if (!draw) return fail(404, 'Published Result not found');
+    if (draw.winningNumber !== request.oldWinningNumber) return fail(409, 'Published Result changed after this request; submit a new request');
+    const previousWinningNumber = draw.winningNumber;
+    const correctedAt = new Date().toISOString();
+    draw.correctionHistory ??= [];
+    draw.correctionHistory.push({ requestId: request.id, oldWinningNumber: previousWinningNumber, newWinningNumber: request.proposedWinningNumber, reason: request.reason, requestedBy: request.requestedBy, approvedBy: user.id, correctedAt });
+    draw.winningNumber = request.proposedWinningNumber;
+    draw.corrected = true;
+    draw.correctedAt = correctedAt;
+    draw.correctedBy = user.id;
+    for (const ticket of store.tickets.filter((item) => ticketMatchesScope(item, draw))) {
+      const result = evaluateTicket(ticket.number, draw.winningNumber, prizeSchemeForTicket(ticket), ticket.catalogPattern);
+      ticket.drawId = draw.id;
+      ticket.prize = result.prize * ticket.quantity;
+      ticket.status = result.prize > 0 ? 'WIN' : 'LOSE';
+    }
+    for (const report of store.saleReports.filter((item) => reportMatchesResultScope(item, draw))) {
+      report.drawId = draw.id;
+      report.winningNumber = draw.winningNumber;
+      report.status = 'FINALIZED';
+      report.resultCorrectedAt = correctedAt;
+    }
+    request.status = 'APPROVED';
+    request.approvedAt = correctedAt;
+    request.approvedBy = user.id;
+    audit(user.id, 'RESULT_CORRECTION_APPROVED_AND_RECALCULATED', 'draw', draw.id, { requestId: request.id, oldWinningNumber: previousWinningNumber, newWinningNumber: draw.winningNumber, reason: request.reason });
+    broadcast({ event: 'draw.corrected', draw });
+    return ok({ request, draw, recalculatedTickets: store.tickets.filter((item) => ticketMatchesScope(item, draw)).length, recalculatedReports: store.saleReports.filter((item) => reportMatchesResultScope(item, draw)).length });
+  },
+  'POST /api/owner/result-corrections/reject': ({ body, user }) => {
+    requireRole(user, 'OWNER');
+    requireOwnerPassword(body, user);
+    const request = store.resultCorrectionRequests.find((item) => item.id === String(body.requestId) && item.status === 'PENDING');
+    if (!request) return fail(404, 'Pending Result correction request not found');
+    const rejectionReason = String(body.rejectionReason ?? '').trim();
+    if (rejectionReason.length < 5) return fail(400, 'Enter a clear rejection reason');
+    request.status = 'REJECTED';
+    request.rejectedAt = new Date().toISOString();
+    request.rejectedBy = user.id;
+    request.rejectionReason = rejectionReason;
+    audit(user.id, 'RESULT_CORRECTION_REJECTED', 'draw', request.drawId, { requestId: request.id, rejectionReason });
+    return ok(request);
+  },
   'GET /api/reports/result-audit': ({ user, url }) => {
     requireRole(user, 'SUPER_ADMIN');
     const draw = store.draws.find((item) => item.id === url.searchParams.get('drawId') && item.locked && item.status === 'PUBLISHED');
@@ -528,7 +603,7 @@ const routes = {
     if (!/^\d{4}$/.test(String(body.winningNumber))) return fail(400, 'Winning number must contain four digits');
     const scope = validateResultScope(body);
     validateResultPublishTime(scope, user);
-    return ok(buildResultPreview(String(body.winningNumber), scope));
+    return ok(buildResultPreview(String(body.winningNumber), scope, false, user.id));
   },
   'GET /api/reports/result-candidates': ({ user, url }) => {
     requireRole(user, 'SUPER_ADMIN');
@@ -539,7 +614,7 @@ const routes = {
     const candidates = [...new Set(scopedTickets
       .filter((ticket) => store.settings.schemes[ticket.scheme]?.length === 4)
       .map((ticket) => ticket.number))]
-      .map((number) => buildResultPreview(number, scope))
+      .map((number) => buildResultPreview(number, scope, false, user.id))
       .sort((left, right) => right.projectedProfit - left.projectedProfit || left.winningNumber.localeCompare(right.winningNumber))
       .slice(0, 10);
     return ok({ candidates, availableUniqueNumbers: new Set(scopedTickets.filter((ticket) => store.settings.schemes[ticket.scheme]?.length === 4).map((ticket) => ticket.number)).size });
@@ -552,7 +627,7 @@ const routes = {
     if (!/^\d{4}$/.test(String(body.winningNumber))) return fail(400, 'Winning number must contain four digits');
     const scope = validateResultScope(body);
     if (store.draws.some((draw) => draw.boardId === scope.boardId && draw.showId === scope.showId && draw.resultDate === scope.resultDate)) return fail(409, 'Result is already published and permanently locked for this Lot Code, Show, and date');
-    const preview = buildResultPreview(String(body.winningNumber), scope);
+    const preview = buildResultPreview(String(body.winningNumber), scope, false, user.id);
     const overrideBelowTarget = body.overrideBelowTarget === true || body.overrideBelowTarget === 'on';
     const overrideReason = String(body.overrideReason ?? '').trim();
     if (!preview.meetsMinimumProfit && !overrideBelowTarget) return fail(409, 'Minimum profit target is not met. Preview another result or use the audited Super Admin override.');
@@ -1029,8 +1104,8 @@ function prizeSchemeForTicket(ticket) {
   return base;
 }
 
-function buildResultPreview(winningNumber, scope) {
-  const tickets = store.tickets.filter((ticket) => ticketMatchesResultScope(ticket, scope));
+function buildResultPreview(winningNumber, scope, includeSettled = false, superAdminId = 'admin-1') {
+  const tickets = store.tickets.filter((ticket) => includeSettled ? ticketMatchesScope(ticket, scope) : ticketMatchesResultScope(ticket, scope));
   const quantity = tickets.reduce((sum, ticket) => sum + ticket.quantity, 0);
   const totalSales = tickets.reduce((sum, ticket) => sum + ticket.total, 0);
   const totalPrizes = tickets.reduce((sum, ticket) => {
@@ -1059,7 +1134,7 @@ function buildResultPreview(winningNumber, scope) {
     meetsMinimumProfit,
     status: projectedProfit > 0 ? 'PROFIT' : projectedProfit < 0 ? 'LOSS' : 'BREAK_EVEN',
     boardId: scope.boardId, showId: scope.showId, resultDate: scope.resultDate,
-    directSellerOutcomes: buildDirectSellerPerformance(winningNumber, scope)
+    directSellerOutcomes: buildDirectSellerPerformance(winningNumber, scope, superAdminId, includeSettled)
   };
 }
 
@@ -1215,11 +1290,11 @@ function buildWeeklyAccounts(selectedDate, superAdminId = 'admin-1') {
   return { ...range, totalSales: rows.reduce((sum, item) => sum + item.sales, 0), totalPrizes: rows.reduce((sum, item) => sum + item.prizes, 0), totalExpenses, finalNetAmount: days.reduce((sum, item) => sum + item.netAmount, 0), totalDue: rows.reduce((sum, item) => sum + item.netDue, 0), totalReceived: rows.reduce((sum, item) => sum + item.received, 0), totalBalance: rows.reduce((sum, item) => sum + item.balance, 0), days, rows };
 }
 
-function buildDirectSellerPerformance(previewWinningNumber = null, scope = null, superAdminId = 'admin-1') {
+function buildDirectSellerPerformance(previewWinningNumber = null, scope = null, superAdminId = 'admin-1', includeSettled = false) {
   const latestDraw = store.draws.at(-1) ?? null;
   const winningNumber = previewWinningNumber ?? latestDraw?.winningNumber ?? null;
   return store.users.filter((item) => item.role === 'SELLER' && item.parentId === superAdminId).map((seller) => {
-    const tickets = store.tickets.filter((ticket) => ticket.sellerId === seller.id && (scope ? ticketMatchesResultScope(ticket, scope) : latestDraw ? ticket.drawId === latestDraw.id : ticket.status === 'ACTIVE'));
+    const tickets = store.tickets.filter((ticket) => ticket.sellerId === seller.id && (scope ? (includeSettled ? ticketMatchesScope(ticket, scope) : ticketMatchesResultScope(ticket, scope)) : latestDraw ? ticket.drawId === latestDraw.id : ticket.status === 'ACTIVE'));
     const quantity = tickets.reduce((sum, ticket) => sum + ticket.quantity, 0);
     const sales = tickets.reduce((sum, ticket) => sum + ticket.total, 0);
     const prizeExposure = latestDraw && !scope && !previewWinningNumber ? tickets.reduce((sum, ticket) => sum + ticket.prize, 0) : winningNumber ? tickets.reduce((sum, ticket) => {

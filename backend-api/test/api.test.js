@@ -117,6 +117,24 @@ test('NGS direct Seller workflow', async (context) => {
   assert.equal(detail.data.superAdmin.code, 'SA260001');
   assert.equal(detail.data.entries.every((item) => 'bonusAmount' in item && 'netAmount' in item && 'billNumber' in item), true);
 
+  const correctionDraw = { id: 'test-correction-draw', createdAt: new Date().toISOString(), boardId: reports.data[0].boardId, boardCode: reports.data[0].boardCode, boardName: 'Kerala', showId: reports.data[0].showId, showLabel: reports.data[0].showLabel, resultDate: reports.data[0].businessDate, winningNumber: '9999', publishedBy: 'admin-1', status: 'PUBLISHED', locked: true };
+  store.draws.push(correctionDraw);
+  const correctionRequest = await json('/api/result-corrections', admin, { method: 'POST', body: JSON.stringify({ drawId: correctionDraw.id, proposedWinningNumber: '0234', reason: 'Official result correction', actionPassword: 'Admin@123' }) });
+  assert.equal(correctionRequest.response.status, 201);
+  assert.equal(correctionRequest.data.status, 'PENDING');
+  assert.equal(correctionRequest.data.oldWinningNumber, '9999');
+  const ownerCorrections = await json('/api/owner/result-corrections', owner);
+  assert.equal(ownerCorrections.data.some((item) => item.id === correctionRequest.data.id && item.superAdminCode === 'SA260001'), true);
+  assert.equal(correctionRequest.data.preview.ticketQuantity, 106);
+  const approvedCorrection = await json('/api/owner/result-corrections/approve', owner, { method: 'POST', body: JSON.stringify({ requestId: correctionRequest.data.id, ownerPassword: 'Owner@123', verified: 'on' }) });
+  assert.equal(approvedCorrection.response.status, 200);
+  assert.equal(approvedCorrection.data.draw.winningNumber, '0234');
+  assert.equal(approvedCorrection.data.draw.correctionHistory[0].oldWinningNumber, '9999');
+  assert.equal(approvedCorrection.data.request.status, 'APPROVED');
+  assert.equal(approvedCorrection.data.recalculatedTickets > 0, true);
+  assert.equal(store.tickets.some((item) => item.reportId === reports.data[0].id && item.prize > 0), true);
+  assert.equal(store.saleReports.find((item) => item.id === reports.data[0].id).winningNumber, '0234');
+
   const commission = await json('/api/users/seller-commission', admin, { method: 'PUT', body: JSON.stringify({ sellerId: directSeller.data.id, commissionPercentage: 30, actionPassword: 'Admin@123' }) });
   assert.equal(commission.response.status, 200);
   assert.equal(commission.data.commissionPercentage, 30);

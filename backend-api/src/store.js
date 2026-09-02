@@ -53,7 +53,7 @@ export const store = {
     user('owner-1', null, 'OWNER', 'Joker', '9000000000', 'Owner@123'),
     user('admin-1', null, 'SUPER_ADMIN', 'Super Admin', '9000000001', 'Admin@123'),
     { ...user('seller-1', 'admin-1', 'SELLER', 'Demo Seller', '9000000004', 'Seller@123'), commissionPercentage: 0, lotCodeIds: ['kerala'], lotCodeSchemeRates: { kerala: Object.fromEntries(initialSchemeIds.map((id) => [id, { enabled: true, rate: initialRateFor(id) }])) }, catalogSchemeRates: Object.fromEntries(initialSchemeIds.map((id) => [id, { enabled: true, rate: initialRateFor(id) }])) }
-  ], contests: [], tickets: [], bills: [], draws: [], saleReports: [], reportCorrections: [], weeklyPayments: [], dailyExpenses: [], bonusRules: [], passwordResetRequests: [], licenseRenewalRequests: [], audit: []
+  ], contests: [], tickets: [], bills: [], draws: [], resultCorrectionRequests: [], saleReports: [], reportCorrections: [], weeklyPayments: [], dailyExpenses: [], bonusRules: [], passwordResetRequests: [], licenseRenewalRequests: [], audit: []
 };
 
 const dataFile = resolve(import.meta.dirname, '../data/application-data.json');
@@ -146,6 +146,7 @@ for (const seller of store.users.filter((item) => item.role === 'SELLER')) {
 }
 store.saleReports ??= [];
 store.reportCorrections ??= [];
+store.resultCorrectionRequests ??= [];
 store.passwordResetRequests ??= [];
 store.licenseRenewalRequests ??= [];
 store.bills ??= [];

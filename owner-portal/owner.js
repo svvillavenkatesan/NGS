@@ -55,6 +55,11 @@ function renewalsPanel(renewals = []) {
   return `<section class="card wide"><h2>Validity Renewals</h2>${rows ? `<table><thead><tr><th>Admin ID</th><th>Name</th><th>Period</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table>` : '<p>No renewal requests.</p>'}</section>`;
 }
 
+function resultCorrectionsPanel(requests = []) {
+  const rows = requests.map((item) => `<tr><td>${escapeHtml(item.resultDate)}</td><td>${escapeHtml(item.superAdminCode)} · ${escapeHtml(item.superAdminName)}</td><td>${escapeHtml(item.boardCode)} · ${escapeHtml(item.showLabel)}</td><td><span class="number compact-number">${escapeHtml(item.oldWinningNumber)}</span> → <strong class="number compact-number">${escapeHtml(item.proposedWinningNumber)}</strong></td><td>${escapeHtml(item.reason)}</td><td>Prize ${money(item.preview?.totalPrizes)}<br>Net ${money(item.preview?.projectedProfit)} (${Number(item.preview?.profitPercentage ?? 0)}%)</td><td><span class="status ${item.status === 'APPROVED' ? 'profit' : item.status === 'REJECTED' ? 'loss' : 'break_even'}">${escapeHtml(item.status)}</span></td><td>${item.status === 'PENDING' ? `<form class="result-correction-approve-form"><input type="hidden" name="requestId" value="${escapeHtml(item.id)}"><label class="check"><input type="checkbox" name="verified" required> Official result verified</label><input name="ownerPassword" type="password" placeholder="Owner PWD" required><button>Approve & Recalculate</button></form><form class="result-correction-reject-form"><input type="hidden" name="requestId" value="${escapeHtml(item.id)}"><input name="rejectionReason" minlength="5" placeholder="Rejection reason" required><input name="ownerPassword" type="password" placeholder="Owner PWD" required><button type="submit" class="secondary">Reject</button></form>` : escapeHtml(item.rejectionReason ?? 'Completed')}</td></tr>`).join('');
+  return `<section class="card wide"><p class="muted">OLD RESULT IS RETAINED IN PERMANENT AUDIT HISTORY</p><h2>Result Correction Approval</h2>${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Super Admin</th><th>Lot / Show</th><th>Old → New</th><th>Reason</th><th>Recalculation Preview</th><th>Status</th><th>Owner Action</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p>No Result correction requests.</p>'}</section>`;
+}
+
 function ownerReportsPanel(reports = []) {
   const totals = reports.reduce((sum, item) => ({ quantity: sum.quantity + Number(item.totalQuantity ?? 0), sales: sum.sales + Number(item.totalSales ?? 0), prize: sum.prize + Number(item.totalPrize ?? 0), bonus: sum.bonus + Number(item.totalBonus ?? 0), net: sum.net + Number(item.totalNet ?? 0) }), { quantity: 0, sales: 0, prize: 0, bonus: 0, net: 0 });
   const rows = reports.map((report) => `<tr><td>${escapeHtml(report.businessDate)}</td><td>${escapeHtml(report.superAdminCode)} · ${escapeHtml(report.superAdminName)}</td><td>${escapeHtml(report.sellerCode)} · ${escapeHtml(report.sellerName)}</td><td>${escapeHtml(report.boardCode)} · ${escapeHtml(report.showLabel)}</td><td>${report.entryCount} / ${report.totalQuantity}</td><td>${money(report.totalSales)}</td><td>${money(report.totalPrize)}</td><td>${money(report.totalBonus)}</td><td>${money(report.totalNet)}</td><td><button type="button" class="secondary owner-view-report" data-report-id="${escapeHtml(report.id)}">View</button></td></tr>`).join('');
@@ -73,16 +78,18 @@ function ownerPrintableReport(report) {
 
 async function render(message = '') {
   try {
-    const [data, renewals, reports] = await Promise.all([request('/api/owner/control'), request('/api/owner/renewals'), request('/api/reports/sales')]);
+    const [data, renewals, reports, resultCorrections] = await Promise.all([request('/api/owner/control'), request('/api/owner/renewals'), request('/api/reports/sales'), request('/api/owner/result-corrections')]);
     app.innerHTML = `<div class="compact-panel-title"><strong>NGS · SYSTEM OWNER</strong></div><section class="grid"><article class="card"><span class="muted">Super Admins</span><strong>${data.totalSuperAdmins}</strong></article><article class="card"><span class="muted">Active Sellers</span><strong>${data.currentSellers}</strong></article><article class="card"><span class="muted">Total Capacity</span><strong>${data.totalCapacity}</strong></article></section><section class="grid"><article class="card wide"><h2>Create Super Admin</h2><form id="create-admin-form"><label>Name<input name="name" maxlength="60" required></label><label>Phone / User ID<input name="phone" inputmode="numeric" pattern="[0-9]{10,15}" required></label><label>Temporary PWD<input name="password" type="password" minlength="8" required></label><label>Seller Limit<input name="sellerLimit" type="number" min="1" max="100000" value="100" required></label><label>Owner PWD<input name="ownerPassword" type="password" required></label><button>Create Super Admin</button></form></article><article class="card wide"><h2>Change Owner PWD</h2><form id="owner-password-form"><label>Current PWD<input name="currentPassword" type="password" required></label><label>New PWD<input name="newPassword" type="password" minlength="8" required></label><button>Change PWD</button></form></article></section><h2>Super Admin Accounts</h2><section class="grid">${data.superAdmins.map(adminCard).join('') || '<p>No Super Admin accounts.</p>'}</section><p id="owner-message" class="notice">${escapeHtml(message)}</p><button id="owner-exit" class="secondary">Exit</button>`;
     document.querySelector('#create-admin-form').addEventListener('submit', createAdmin);
     document.querySelector('#create-admin-form [name="sellerLimit"]').closest('label').insertAdjacentHTML('afterend', '<label>Validity<select name="validityMonths"><option value="6">6 Months</option><option value="12">1 Year</option></select></label>');
     document.querySelectorAll('.admin-limit-form').forEach((form, index) => form.closest('.card').querySelector('h2').insertAdjacentHTML('afterend', validityBadge(data.superAdmins[index])));
-    document.querySelector('#owner-message').insertAdjacentHTML('beforebegin', `${renewalsPanel(renewals)}${ownerReportsPanel(reports)}`);
+    document.querySelector('#owner-message').insertAdjacentHTML('beforebegin', `${resultCorrectionsPanel(resultCorrections)}${renewalsPanel(renewals)}${ownerReportsPanel(reports)}`);
     document.querySelectorAll('.admin-limit-form').forEach((form) => form.addEventListener('submit', saveLimit));
     document.querySelectorAll('.admin-password-reset-form').forEach((form) => form.addEventListener('submit', resetAdminPassword));
     document.querySelector('#owner-password-form').addEventListener('submit', changeOwnerPassword);
     document.querySelectorAll('.renewal-approve-form').forEach((form) => form.addEventListener('submit', approveRenewal));
+    document.querySelectorAll('.result-correction-approve-form').forEach((form) => form.addEventListener('submit', approveResultCorrection));
+    document.querySelectorAll('.result-correction-reject-form').forEach((form) => form.addEventListener('submit', rejectResultCorrection));
     document.querySelectorAll('.owner-view-report').forEach((button) => button.addEventListener('click', () => viewOwnerReport(button.dataset.reportId)));
     document.querySelector('#owner-report-filter').addEventListener('change', filterOwnerReports);
     document.querySelector('#owner-exit').addEventListener('click', () => { sessionStorage.removeItem('token:OWNER'); token = null; loginScreen(); });
@@ -118,6 +125,22 @@ async function approveRenewal(event) {
   try {
     const result = await request('/api/owner/renewals/approve', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) });
     await render(`Renewal approved. Signed Key ${result.licenseKey}`);
+  } catch (error) { showMessage(error.message, true); }
+}
+
+async function approveResultCorrection(event) {
+  event.preventDefault();
+  try {
+    const result = await request('/api/owner/result-corrections/approve', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) });
+    await render(`Result corrected to ${result.draw.winningNumber}. ${result.recalculatedTickets} tickets and ${result.recalculatedReports} reports recalculated.`);
+  } catch (error) { showMessage(error.message, true); }
+}
+
+async function rejectResultCorrection(event) {
+  event.preventDefault();
+  try {
+    await request('/api/owner/result-corrections/reject', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) });
+    await render('Result correction request rejected.');
   } catch (error) { showMessage(error.message, true); }
 }
 

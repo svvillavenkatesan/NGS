@@ -99,4 +99,5 @@ await loadResults();
 setInterval(() => loadResults(datePicker.value), 15000);
 const events = new EventSource('/api/public-events');
 events.addEventListener('draw.published', () => { if (datePicker.value === today) loadResults(today); });
+events.addEventListener('draw.corrected', () => loadResults(datePicker.value));
 events.onerror = () => setTimeout(() => loadResults(datePicker.value), 2000);
