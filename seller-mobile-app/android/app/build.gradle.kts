@@ -18,7 +18,7 @@ gradle.taskGraph.whenReady {
 }
 
 android {
-    namespace = "com.svv.ngs.seller"
+    namespace = "com.svv.ngs.directseller"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -29,7 +29,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.svv.ngs.seller"
+        applicationId = "com.svv.ngs.directseller"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
