@@ -122,7 +122,7 @@ class Entry extends StatefulWidget {
 
 class _Entry extends State<Entry> {
   final number = TextEditingController(),
-      qty = TextEditingController(text: '1');
+      qty = TextEditingController();
   final numberFocus = FocusNode();
   final List<Map<String, dynamic>> cart = [];
   final List<Map<String, dynamic>> previousBills = [];
@@ -195,7 +195,7 @@ class _Entry extends State<Entry> {
     showId = nextShowId(nextBoard);
     schemeId = available.firstOrNull?['id'];
     number.clear();
-    qty.text = '1';
+    qty.clear();
     box = false;
     note =
         '${nextBoard['code'] == 'DR' || nextBoard['id'] == 'dear' ? 'DR' : nextBoard['code']} selected automatically';
@@ -361,7 +361,7 @@ class _Entry extends State<Entry> {
       }
       note = '${nums.length * ts.length} entries added';
       number.clear();
-      qty.text = '1';
+      qty.clear();
       box = false;
     });
     focusNumberAndKeyboard();

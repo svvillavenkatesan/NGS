@@ -206,8 +206,20 @@ p { margin: 6px 0 10px; }
 input, select { padding: 9px 10px; margin: 4px 0 9px; }
 button { padding: 9px 13px; }
 th, td { padding: 8px 9px; }
-.metrics { gap: 7px; }
-.metrics > div { padding: 9px; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 7px; }
+.metrics > div { min-width: 0; padding: 9px; border-radius: 9px; background: #160b25; border: 1px solid #51326d; }
+.metrics > div span { display: block; color: #b9aacb; font-size: 11px; }
+.metrics > div strong { overflow-wrap: anywhere; }
+.report-summary { grid-template-columns: repeat(5, minmax(105px, 1fr)); margin: 6px 0 10px; overflow-x: auto; }
+.report-summary > div { padding: 7px 9px; }
+.report-summary > div strong { font-size: 19px; margin-top: 3px; }
+.report-suite-menu { padding-bottom: 7px; }
+.report-suite-menu h2 { margin-bottom: 2px; }
+.seller-report-menu { flex-wrap: nowrap; overflow-x: auto; }
+.seller-report-menu button { white-space: nowrap; }
+.report-suite-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.report-suite-heading h2 { margin: 0; }
+.suite-metrics { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 .scheme-rates { padding: 10px; margin: 6px 0 10px; }
 .scheme-group { padding: 8px 0 10px; }
 .subscheme-grid { gap: 7px; }
