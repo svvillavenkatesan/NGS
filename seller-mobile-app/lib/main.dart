@@ -458,6 +458,35 @@ class _Entry extends State<Entry> {
         onLayout: (_) => document.save());
   }
 
+  Future<void> printReport(String title, List<String> lines) async {
+    final document = pw.Document();
+    const width = 2 * PdfPageFormat.inch;
+    final height = (80 + lines.length * 13).clamp(145, 20000).toDouble();
+    final format =
+        PdfPageFormat(width, height, marginAll: 3 * PdfPageFormat.mm);
+    document.addPage(pw.Page(
+        pageFormat: format,
+        build: (_) => pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  pw.Text(title,
+                      textAlign: pw.TextAlign.center,
+                      style: const pw.TextStyle(
+                          fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                  pw.Divider(thickness: .5),
+                  ...lines.map((line) => pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
+                      child: pw.Text(line,
+                          style: const pw.TextStyle(fontSize: 7)))),
+                  pw.Divider(thickness: .5)
+                ])));
+    await Printing.layoutPdf(
+        name: '${title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')}.pdf',
+        format: format,
+        dynamicLayout: false,
+        onLayout: (_) => document.save());
+  }
+
   void showPreviousBills() {
     showModalBottomSheet<void>(
         context: context,
@@ -665,39 +694,42 @@ class _Entry extends State<Entry> {
                                       final report = dayReports[index];
                                       return Card(
                                           margin: EdgeInsets.zero,
-                                          child: InkWell(
-                                              onTap: () {
-                                                Navigator.pop(sheetContext);
-                                                showReportSuite(
-                                                    '${report['id']}');
-                                              },
-                                              child: Padding(
-                                                  padding:
-                                                      const EdgeInsets.all(10),
-                                                  child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
-                                                      children: [
-                                                        Text(
-                                                            '${report['boardCode']} · ${report['showLabel']}',
-                                                            style: const TextStyle(
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold)),
-                                                        const SizedBox(
-                                                            height: 5),
-                                                        Text(
-                                                            '${report['businessDate']} · Qty ${report['totalQuantity']}'),
-                                                        Text(
-                                                            'Sales ₹${report['totalSales']} · Prize ₹${report['totalPrize']}'),
-                                                        Text(
-                                                            'Bonus ₹${report['totalBonus']} · Net ₹${report['totalNet']}',
-                                                            style: const TextStyle(
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600))
-                                                      ]))));
+                                          child: Padding(
+                                              padding: const EdgeInsets.all(10),
+                                              child: Row(children: [
+                                                Expanded(
+                                                    child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                      Text(
+                                                          '${report['boardCode']} · ${report['showLabel']}',
+                                                          style: const TextStyle(
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold)),
+                                                      const SizedBox(height: 5),
+                                                      Text(
+                                                          '${report['businessDate']} · Qty ${report['totalQuantity']}'),
+                                                      Text(
+                                                          'Sales ₹${report['totalSales']} · Prize ₹${report['totalPrize']}'),
+                                                      Text(
+                                                          'Bonus ₹${report['totalBonus']} · Net ₹${report['totalNet']}',
+                                                          style: const TextStyle(
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600))
+                                                    ])),
+                                                TextButton(
+                                                    onPressed: () {
+                                                      Navigator.pop(
+                                                          sheetContext);
+                                                      showReportSuite(
+                                                          '${report['id']}');
+                                                    },
+                                                    child: const Text('SELECT'))
+                                              ])));
                                     }))
                       ])))));
     } catch (e) {
@@ -780,96 +812,188 @@ class _Entry extends State<Entry> {
           (suite['winningReport'] as List).cast<Map<String, dynamic>>();
       final bills =
           (suite['billWinningReport'] as List).cast<Map<String, dynamic>>();
-      Widget schemeRows(List<Map<String, dynamic>> rows) => ListView(
-          padding: const EdgeInsets.all(10),
-          children: rows
-              .map((row) => ListTile(
-                  dense: true,
-                  title: Text('${row['scheme']}  X ${row['quantity']}'),
-                  trailing:
-                      Text('₹${row['amount']}  /  Prize ₹${row['winning']}')))
-              .toList());
-      Widget entryRows() => ListView.separated(
-          padding: const EdgeInsets.all(10),
-          itemCount: entries.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 6),
-          itemBuilder: (_, index) {
-            final row = entries[index];
-            final reason = row['matchRule'] == null
-                ? 'No prize'
-                : '${row['matchRule']} · ₹${row['unitPrize']} X ${row['quantity']}';
-            return Card(
-                child: Padding(
+      final billNumbers =
+          entries.map((row) => '${row['billNumber']}').toSet().toList();
+      String? selectedBill = billNumbers.firstOrNull;
+      List<String> schemePrintLines(List<Map<String, dynamic>> rows) => rows
+          .map((row) =>
+              '${row['scheme']} X ${row['quantity']}  Rs ${row['amount']}  Prize Rs ${row['winning']}')
+          .toList();
+      Widget printButton(String label, VoidCallback action) => Padding(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
+          child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                  onPressed: action,
+                  icon: const Icon(Icons.print, size: 18),
+                  label: Text(label))));
+      Widget schemeRows(List<Map<String, dynamic>> rows, String title) =>
+          Column(children: [
+            printButton('PRINT $title',
+                () => printReport(title, schemePrintLines(rows))),
+            Expanded(
+                child: ListView(
                     padding: const EdgeInsets.all(10),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                              '${row['scheme']} · ${row['enteredNumber']} X ${row['quantity']}',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold)),
-                          Text('${row['billNumber']} · ${row['time']}'),
-                          Text('Prize reason: $reason'),
-                          Text(
-                              'Sold ₹${row['saleAmount']} · Prize ₹${row['prizeAmount']}'),
-                          Text(
-                              'Bonus ₹${row['bonusAmount']} · Net ₹${row['netAmount']}',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w600))
-                        ])));
-          });
-      Widget metrics(Map<String, dynamic> values) => ListView(
-          padding: const EdgeInsets.all(14),
-          children: values.entries
-              .map((entry) => ListTile(
-                  dense: true,
-                  title: Text(entry.key.replaceAll('_', ' ').toUpperCase()),
-                  trailing: Text('${entry.value}',
-                      style: const TextStyle(fontWeight: FontWeight.bold))))
-              .toList());
+                    children: rows
+                        .map((row) => ListTile(
+                            dense: true,
+                            title:
+                                Text('${row['scheme']}  X ${row['quantity']}'),
+                            trailing: Text(
+                                '₹${row['amount']}  /  Prize ₹${row['winning']}')))
+                        .toList()))
+          ]);
+      Widget entryRows(StateSetter setSheetState) {
+        final selectedEntries = entries
+            .where((row) => '${row['billNumber']}' == selectedBill)
+            .toList();
+        final lines = selectedEntries
+            .map((row) =>
+                '${row['scheme']} ${row['enteredNumber']} X ${row['quantity']}  Sold Rs ${row['saleAmount']}  Prize Rs ${row['prizeAmount']}')
+            .toList();
+        return Column(children: [
+          Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
+              child: Row(children: [
+                Expanded(
+                    child: DropdownButtonFormField<String>(
+                        initialValue: selectedBill,
+                        decoration:
+                            const InputDecoration(labelText: 'Bill Number'),
+                        items: billNumbers
+                            .map((bill) => DropdownMenuItem(
+                                value: bill, child: Text(bill)))
+                            .toList(),
+                        onChanged: (value) =>
+                            setSheetState(() => selectedBill = value))),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                    tooltip: 'Print selected bill entries',
+                    onPressed: selectedBill == null
+                        ? null
+                        : () =>
+                            printReport('ENTRY REPORT $selectedBill', lines),
+                    icon: const Icon(Icons.print))
+              ])),
+          Expanded(
+              child: ListView.separated(
+                  padding: const EdgeInsets.all(10),
+                  itemCount: selectedEntries.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 6),
+                  itemBuilder: (_, index) {
+                    final row = selectedEntries[index];
+                    final reason = row['matchRule'] == null
+                        ? 'No prize'
+                        : '${row['matchRule']} · ₹${row['unitPrize']} X ${row['quantity']}';
+                    return Card(
+                        child: Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                      '${row['scheme']} · ${row['enteredNumber']} X ${row['quantity']}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                  Text('${row['billNumber']} · ${row['time']}'),
+                                  Text('Prize reason: $reason'),
+                                  Text(
+                                      'Sold ₹${row['saleAmount']} · Prize ₹${row['prizeAmount']}'),
+                                  Text(
+                                      'Bonus ₹${row['bonusAmount']} · Net ₹${row['netAmount']}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600))
+                                ])));
+                  }))
+        ]);
+      }
+
+      Widget metrics(Map<String, dynamic> values, String title) =>
+          Column(children: [
+            printButton(
+                'PRINT $title',
+                () => printReport(
+                    title,
+                    values.entries
+                        .map((entry) =>
+                            '${entry.key.replaceAll('_', ' ').toUpperCase()}: ${entry.value}')
+                        .toList())),
+            Expanded(
+                child: ListView(
+                    padding: const EdgeInsets.all(14),
+                    children: values.entries
+                        .map((entry) => ListTile(
+                            dense: true,
+                            title: Text(
+                                entry.key.replaceAll('_', ' ').toUpperCase()),
+                            trailing: Text('${entry.value}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold))))
+                        .toList()))
+          ]);
       showModalBottomSheet<void>(
           context: context,
           isScrollControlled: true,
-          builder: (sheetContext) => DefaultTabController(
-              length: 7,
-              child: SafeArea(
-                  child: SizedBox(
-                      height: MediaQuery.of(sheetContext).size.height * .86,
-                      child: Column(children: [
-                        const TabBar(isScrollable: true, tabs: [
-                          Tab(text: 'ENTRY'),
-                          Tab(text: 'ITEM'),
-                          Tab(text: 'SALES'),
-                          Tab(text: 'WINNING'),
-                          Tab(text: 'PAYMENT'),
-                          Tab(text: 'BILL WINNING'),
-                          Tab(text: 'SUMMARY')
-                        ]),
-                        Expanded(
-                            child: TabBarView(children: [
-                          entryRows(),
-                          schemeRows(items),
-                          metrics((suite['salesReport'] as Map)
-                              .cast<String, dynamic>()),
-                          schemeRows(wins),
-                          metrics((suite['paymentReport'] as Map)
-                              .cast<String, dynamic>()),
-                          ListView(
-                              padding: const EdgeInsets.all(10),
-                              children: bills
-                                  .map((bill) => ListTile(
-                                      dense: true,
-                                      title: Text('${bill['billNumber']}'),
-                                      subtitle: Text(
-                                          '${bill['time']} · Qty ${bill['quantity']}'),
-                                      trailing: Text(
-                                          '₹${bill['amount']}\nPrize ₹${bill['prize']}',
-                                          textAlign: TextAlign.right)))
-                                  .toList()),
-                          metrics((suite['summaryReport'] as Map)
-                              .cast<String, dynamic>())
-                        ]))
-                      ])))));
+          builder: (sheetContext) => StatefulBuilder(
+              builder: (sheetContext, setSheetState) => DefaultTabController(
+                  length: 7,
+                  child: SafeArea(
+                      child: SizedBox(
+                          height: MediaQuery.of(sheetContext).size.height * .86,
+                          child: Column(children: [
+                            const TabBar(isScrollable: true, tabs: [
+                              Tab(text: 'ENTRY'),
+                              Tab(text: 'ITEM'),
+                              Tab(text: 'SALES'),
+                              Tab(text: 'WINNING'),
+                              Tab(text: 'PAYMENT'),
+                              Tab(text: 'BILL WINNING'),
+                              Tab(text: 'SUMMARY')
+                            ]),
+                            Expanded(
+                                child: TabBarView(children: [
+                              entryRows(setSheetState),
+                              schemeRows(items, 'ITEM REPORT'),
+                              metrics(
+                                  (suite['salesReport'] as Map)
+                                      .cast<String, dynamic>(),
+                                  'SALES REPORT'),
+                              schemeRows(wins, 'WINNING REPORT'),
+                              metrics(
+                                  (suite['paymentReport'] as Map)
+                                      .cast<String, dynamic>(),
+                                  'PAYMENT REPORT'),
+                              Column(children: [
+                                printButton(
+                                    'PRINT BILL WINNING',
+                                    () => printReport(
+                                        'BILL WINNING REPORT',
+                                        bills
+                                            .map((bill) =>
+                                                '${bill['billNumber']}  Qty ${bill['quantity']}  Rs ${bill['amount']}  Prize Rs ${bill['prize']}')
+                                            .toList())),
+                                Expanded(
+                                    child: ListView(
+                                        padding: const EdgeInsets.all(10),
+                                        children: bills
+                                            .map((bill) => ListTile(
+                                                dense: true,
+                                                title: Text(
+                                                    '${bill['billNumber']}'),
+                                                subtitle: Text(
+                                                    '${bill['time']} · Qty ${bill['quantity']}'),
+                                                trailing: Text(
+                                                    '₹${bill['amount']}\nPrize ₹${bill['prize']}',
+                                                    textAlign:
+                                                        TextAlign.right)))
+                                            .toList())),
+                              ]),
+                              metrics(
+                                  (suite['summaryReport'] as Map)
+                                      .cast<String, dynamic>(),
+                                  'SUMMARY REPORT')
+                            ]))
+                          ]))))));
     } catch (e) {
       if (mounted) {
         setState(() => note = e.toString().replaceFirst('Exception: ', ''));
