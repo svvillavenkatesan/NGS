@@ -72,16 +72,16 @@ function printableHistory(data) {
     const values = row.results.map((item) => item.winningNumber ?? 'NOT PUBLISHED');
     return `<tr><td>${escapeHtml(formatDate(row.resultDate))}</td>${values.map((value) => `<td>${escapeHtml(value)}</td>`).join('')}</tr>`;
   }).join('');
-  return `<!doctype html><html><head><title>Golden Chance ${data.days} Day Results</title><style>
+  return `<!doctype html><html><head><title>Golden Jackpot ${data.days} Day Results</title><style>
     @page{size:A4 portrait;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#17121d;margin:0}h1{margin:0;color:#5a167e;font-size:24px}p{margin:4px 0 14px;color:#555}table{width:100%;border-collapse:collapse;font-size:10px}thead{display:table-header-group}th{background:#511873;color:#fff}th,td{border:1px solid #aaa;padding:6px;text-align:center}td:first-child{font-weight:bold}tbody tr:nth-child(even){background:#f4edf8}.foot{margin-top:10px;font-size:9px;color:#666}
-  </style></head><body><h1>GOLDEN CHANCE · RESULT HISTORY</h1><p>${escapeHtml(formatDate(data.fromDate))} to ${escapeHtml(formatDate(data.toDate))} · ${data.days} Days</p><table><thead><tr>${headers.map((value) => `<th>${value}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table><div class="foot">Generated ${escapeHtml(new Date().toLocaleString('en-IN'))}</div></body></html>`;
+  </style></head><body><h1>GOLDEN JACKPOT · RESULT HISTORY</h1><p>${escapeHtml(formatDate(data.fromDate))} to ${escapeHtml(formatDate(data.toDate))} · ${data.days} Days</p><table><thead><tr>${headers.map((value) => `<th>${value}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table><div class="foot">Generated ${escapeHtml(new Date().toLocaleString('en-IN'))}</div></body></html>`;
 }
 
 datePicker.addEventListener('change', () => loadResults(datePicker.value));
 pdfButton.addEventListener('click', async () => {
   const printWindow = window.open('', '_blank', 'width=900,height=800');
   if (!printWindow) return;
-  printWindow.document.write('<p style="font-family:Arial;padding:30px">Preparing Golden Chance PDF…</p>');
+  printWindow.document.write('<p style="font-family:Arial;padding:30px">Preparing Golden Jackpot PDF…</p>');
   try {
     const response = await fetch(`/api/public-result-history?days=${encodeURIComponent(historyDays.value)}`, { cache: 'no-store' });
     if (!response.ok) throw new Error('History unavailable');

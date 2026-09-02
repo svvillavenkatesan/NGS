@@ -29,7 +29,7 @@ const routes = {
     const requestedDate = String(url.searchParams.get('date') ?? today);
     const resultDate = /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) && requestedDate <= today ? requestedDate : today;
     const results = buildPublicResultSlots(resultDate);
-    return ok({ brand: 'Golden Chance', resultDate, results, updatedAt: new Date().toISOString() });
+    return ok({ brand: 'Golden Jackpot', resultDate, results, updatedAt: new Date().toISOString() });
   },
   'GET /api/public-result-history': ({ url }) => {
     const days = [30, 60, 90].includes(Number(url.searchParams.get('days'))) ? Number(url.searchParams.get('days')) : 30;
@@ -39,7 +39,7 @@ const routes = {
       date.setUTCDate(date.getUTCDate() - index);
       return date.toISOString().slice(0, 10);
     });
-    return ok({ brand: 'Golden Chance', days, fromDate: dates.at(-1), toDate: dates[0], rows: dates.map((resultDate) => ({ resultDate, results: buildPublicResultSlots(resultDate) })) });
+    return ok({ brand: 'Golden Jackpot', days, fromDate: dates.at(-1), toDate: dates[0], rows: dates.map((resultDate) => ({ resultDate, results: buildPublicResultSlots(resultDate) })) });
   },
   'POST /api/auth/login': ({ body, req }) => {
     const identifier = normalizeAccountIdentifier(body.phone ?? body.userId);

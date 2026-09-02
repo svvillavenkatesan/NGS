@@ -134,7 +134,7 @@ h1 span { color: #ffd66f; text-shadow: 0 0 32px rgba(255, 201, 64, .34); }
 .result-card.dear-three { --accent:#9b6cff; }
 
 .card-top { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
-.lot-code { color:var(--accent); font-weight:950; font-size:clamp(25px,2.4vw,38px); letter-spacing:.035em; line-height:1; }
+.lot-code { color:var(--accent); font-weight:950; font-size:clamp(20px,1.8vw,32px); letter-spacing:.02em; line-height:1; white-space:nowrap; }
 .show { margin-top:8px; color:#fff; font-size:clamp(18px,1.55vw,25px); font-weight:900; }
 .card-date { margin-top:8px; color:#c9bed2; font-size:12px; font-weight:750; letter-spacing:.08em; }
 .status { padding:7px 10px; border-radius:999px; font-size:10px; letter-spacing:.08em; font-weight:900; color:#ffdf89; border:1px solid rgba(255,213,105,.25); background:rgba(255,184,36,.1); white-space:nowrap; }
