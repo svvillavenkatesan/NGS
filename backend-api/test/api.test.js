@@ -100,8 +100,14 @@ test('NGS direct Seller workflow', async (context) => {
   const reports = await json('/api/reports/sales', directToken);
   assert.equal(reports.response.status, 200);
   assert.equal(reports.data.length, 1);
+  assert.equal(reports.data[0].sellerCode, '01002');
+  assert.equal(reports.data[0].superAdminCode, 'SA260001');
+  assert.equal(Number.isFinite(reports.data[0].totalBonus), true);
+  assert.equal(reports.data[0].totalNet, reports.data[0].totalSales - reports.data[0].totalPrize - reports.data[0].totalBonus);
   const detail = await json(`/api/reports/sale?reportId=${reports.data[0].id}`, directToken);
   assert.equal(detail.response.status, 200);
+  assert.equal(detail.data.seller.code, '01002');
+  assert.equal(detail.data.superAdmin.code, 'SA260001');
   assert.equal(detail.data.entries.every((item) => 'bonusAmount' in item && 'netAmount' in item && 'billNumber' in item), true);
 
   const commission = await json('/api/users/seller-commission', admin, { method: 'PUT', body: JSON.stringify({ sellerId: directSeller.data.id, commissionPercentage: 30, actionPassword: 'Admin@123' }) });

@@ -16,6 +16,7 @@ void main() {
   }
   runApp(const App());
 }
+
 const client = 'number-game-seller-android/1.0.0';
 Map<String, String> headers([String? token]) => {
       'content-type': 'application/json',
@@ -88,7 +89,8 @@ class _Login extends State<Login> {
                       controller: phone,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
-                          labelText: 'User ID / Phone', border: OutlineInputBorder())),
+                          labelText: 'User ID / Phone',
+                          border: OutlineInputBorder())),
                   const SizedBox(height: 14),
                   TextField(
                       controller: password,
@@ -185,7 +187,8 @@ class _Entry extends State<Entry> {
     number.clear();
     qty.text = '1';
     box = false;
-    note = '${nextBoard['code'] == 'DR' || nextBoard['id'] == 'dear' ? 'DR' : nextBoard['code']} selected automatically';
+    note =
+        '${nextBoard['code'] == 'DR' || nextBoard['id'] == 'dear' ? 'DR' : nextBoard['code']} selected automatically';
     focusNumberAndKeyboard();
   }
 
@@ -263,7 +266,8 @@ class _Entry extends State<Entry> {
         previousBills
           ..clear()
           ..addAll((recent as List).cast<Map<String, dynamic>>());
-        final firstBoard = nextOpenBoard() ?? boards.firstOrNull as Map<String, dynamic>?;
+        final firstBoard =
+            nextOpenBoard() ?? boards.firstOrNull as Map<String, dynamic>?;
         boardId = firstBoard?['id'];
         showId = nextShowId(firstBoard);
         schemeId = available.firstOrNull?['id'];
@@ -488,7 +492,9 @@ class _Entry extends State<Entry> {
           .where((item) => item['enabled'] == true)
           .toList();
       final selectedShows = enabledShows.isEmpty
-          ? [<String, dynamic>{'id': 'all-day', 'label': 'All Day'}]
+          ? [
+              <String, dynamic>{'id': 'all-day', 'label': 'All Day'}
+            ]
           : enabledShows;
       return selectedShows.map(
           (selectedShow) => {'board': selectedBoard, 'show': selectedShow});
@@ -503,6 +509,7 @@ class _Entry extends State<Entry> {
       }
       return null;
     }
+
     showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
@@ -519,8 +526,7 @@ class _Entry extends State<Entry> {
                   ...scopes.map((scope) {
                     final selectedBoard =
                         scope['board'] as Map<String, dynamic>;
-                    final selectedShow =
-                        scope['show'] as Map<String, dynamic>;
+                    final selectedShow = scope['show'] as Map<String, dynamic>;
                     final draw = resultFor('${selectedBoard['id']}',
                         '${selectedShow['id']}', today);
                     return ListTile(
@@ -539,7 +545,8 @@ class _Entry extends State<Entry> {
                       style:
                           TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
                   ...List.generate(7, (index) {
-                    final date = dateKey(now.subtract(Duration(days: index + 1)));
+                    final date =
+                        dateKey(now.subtract(Duration(days: index + 1)));
                     return ExpansionTile(
                         tilePadding: EdgeInsets.zero,
                         title: Text(date),
@@ -578,87 +585,115 @@ class _Entry extends State<Entry> {
           showDragHandle: true,
           builder: (sheetContext) => StatefulBuilder(
               builder: (sheetContext, setSheetState) => SafeArea(
-              child: SizedBox(
-                  height: MediaQuery.of(sheetContext).size.height * .78,
-                  child: Column(children: [
-                    Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 0, 8, 8),
-                        child: Row(children: [
-                          const Expanded(
-                              child: Text('REPORTS',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16))),
-                          TextButton.icon(
-                              onPressed: () {
-                                Navigator.pop(sheetContext);
-                                showChangePassword();
-                              },
-                              icon: const Icon(Icons.lock_reset, size: 18),
-                              label: const Text('PASSWORD'))
-                        ])),
-                    Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        child: Row(children: [
-                          const Icon(Icons.calendar_month, size: 19),
-                          const SizedBox(width: 8),
-                          Expanded(
-                              child: Text(selectedDate,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold))),
-                          TextButton(
-                              onPressed: () async {
-                                final parts = selectedDate.split('-');
-                                final initial = DateTime(
-                                    int.parse(parts[0]),
-                                    int.parse(parts[1]),
-                                    int.parse(parts[2]));
-                                final picked = await showDatePicker(
-                                    context: sheetContext,
-                                    initialDate: initial,
-                                    firstDate: DateTime(2020),
-                                    lastDate: DateTime.now());
-                                if (picked != null) {
-                                  setSheetState(() => selectedDate =
-                                      '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}');
-                                }
-                              },
-                              child: const Text('SELECT DATE'))
-                        ])),
-                    const Divider(height: 8),
-                    Expanded(
-                        child: reports.where((report) =>
-                                    '${report['businessDate']}' == selectedDate).isEmpty
-                            ? const Center(child: Text('No reports'))
-                            : ListView.separated(
-                                padding:
-                                    const EdgeInsets.fromLTRB(14, 0, 14, 18),
-                                itemCount: reports.where((report) =>
-                                    '${report['businessDate']}' == selectedDate).length,
-                                separatorBuilder: (_, __) => const Divider(),
-                                itemBuilder: (_, index) {
-                                  final dayReports = reports.where((report) =>
-                                      '${report['businessDate']}' == selectedDate).toList();
-                                  final report = dayReports[index];
-                                  return ListTile(
-                                      dense: true,
-                                      contentPadding: EdgeInsets.zero,
-                                      title: Text(
-                                          '${report['boardCode']} REPORT · ${report['showLabel']}',
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold)),
-                                      subtitle: Text('${report['businessDate']}'),
-                                      trailing: Text(
-                                          '₹${report['totalSales']}\nPrize ₹${report['totalPrize']}',
-                                          textAlign: TextAlign.right,
-                                          style:
-                                              const TextStyle(fontSize: 11)),
-                                      onTap: () {
-                                        Navigator.pop(sheetContext);
-                                        showReportSuite('${report['id']}');
-                                      });
-                                }))
-                  ])))));
+                  child: SizedBox(
+                      height: MediaQuery.of(sheetContext).size.height * .78,
+                      child: Column(children: [
+                        Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 0, 8, 8),
+                            child: Row(children: [
+                              const Expanded(
+                                  child: Text('REPORTS',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16))),
+                              TextButton.icon(
+                                  onPressed: () {
+                                    Navigator.pop(sheetContext);
+                                    showChangePassword();
+                                  },
+                                  icon: const Icon(Icons.lock_reset, size: 18),
+                                  label: const Text('PASSWORD'))
+                            ])),
+                        Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            child: Row(children: [
+                              const Icon(Icons.calendar_month, size: 19),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                  child: Text(selectedDate,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold))),
+                              TextButton(
+                                  onPressed: () async {
+                                    final parts = selectedDate.split('-');
+                                    final initial = DateTime(
+                                        int.parse(parts[0]),
+                                        int.parse(parts[1]),
+                                        int.parse(parts[2]));
+                                    final picked = await showDatePicker(
+                                        context: sheetContext,
+                                        initialDate: initial,
+                                        firstDate: DateTime(2020),
+                                        lastDate: DateTime.now());
+                                    if (picked != null) {
+                                      setSheetState(() => selectedDate =
+                                          '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}');
+                                    }
+                                  },
+                                  child: const Text('SELECT DATE'))
+                            ])),
+                        const Divider(height: 8),
+                        Expanded(
+                            child: reports
+                                    .where((report) =>
+                                        '${report['businessDate']}' ==
+                                        selectedDate)
+                                    .isEmpty
+                                ? const Center(child: Text('No reports'))
+                                : ListView.separated(
+                                    padding: const EdgeInsets.fromLTRB(
+                                        14, 0, 14, 18),
+                                    itemCount: reports
+                                        .where((report) =>
+                                            '${report['businessDate']}' ==
+                                            selectedDate)
+                                        .length,
+                                    separatorBuilder: (_, __) =>
+                                        const Divider(),
+                                    itemBuilder: (_, index) {
+                                      final dayReports = reports
+                                          .where((report) =>
+                                              '${report['businessDate']}' ==
+                                              selectedDate)
+                                          .toList();
+                                      final report = dayReports[index];
+                                      return Card(
+                                          margin: EdgeInsets.zero,
+                                          child: InkWell(
+                                              onTap: () {
+                                                Navigator.pop(sheetContext);
+                                                showReportSuite(
+                                                    '${report['id']}');
+                                              },
+                                              child: Padding(
+                                                  padding:
+                                                      const EdgeInsets.all(10),
+                                                  child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        Text(
+                                                            '${report['boardCode']} · ${report['showLabel']}',
+                                                            style: const TextStyle(
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold)),
+                                                        const SizedBox(
+                                                            height: 5),
+                                                        Text(
+                                                            '${report['businessDate']} · Qty ${report['totalQuantity']}'),
+                                                        Text(
+                                                            'Sales ₹${report['totalSales']} · Prize ₹${report['totalPrize']}'),
+                                                        Text(
+                                                            'Bonus ₹${report['totalBonus']} · Net ₹${report['totalNet']}',
+                                                            style: const TextStyle(
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600))
+                                                      ]))));
+                                    }))
+                      ])))));
     } catch (e) {
       if (mounted) {
         setState(() => note = e.toString().replaceFirst('Exception: ', ''));
@@ -748,18 +783,35 @@ class _Entry extends State<Entry> {
                   trailing:
                       Text('₹${row['amount']}  /  Prize ₹${row['winning']}')))
               .toList());
-      Widget entryRows() => ListView(
+      Widget entryRows() => ListView.separated(
           padding: const EdgeInsets.all(10),
-          children: entries
-              .map((row) => ListTile(
-                  dense: true,
-                  title: Text(
-                      '${row['scheme']} ${row['enteredNumber']} X ${row['quantity']}'),
-                  subtitle: Text('${row['time']}'),
-                  trailing: Text(
-                      '₹${row['saleAmount']}\nPrize ₹${row['prizeAmount']}',
-                      textAlign: TextAlign.right)))
-              .toList());
+          itemCount: entries.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 6),
+          itemBuilder: (_, index) {
+            final row = entries[index];
+            final reason = row['matchRule'] == null
+                ? 'No prize'
+                : '${row['matchRule']} · ₹${row['unitPrize']} X ${row['quantity']}';
+            return Card(
+                child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                              '${row['scheme']} · ${row['enteredNumber']} X ${row['quantity']}',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold)),
+                          Text('${row['billNumber']} · ${row['time']}'),
+                          Text('Prize reason: $reason'),
+                          Text(
+                              'Sold ₹${row['saleAmount']} · Prize ₹${row['prizeAmount']}'),
+                          Text(
+                              'Bonus ₹${row['bonusAmount']} · Net ₹${row['netAmount']}',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w600))
+                        ])));
+          });
       Widget metrics(Map<String, dynamic> values) => ListView(
           padding: const EdgeInsets.all(14),
           children: values.entries
@@ -858,8 +910,8 @@ class _Entry extends State<Entry> {
             Expanded(
                 flex: 2,
                 child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 7),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
                     decoration: BoxDecoration(
                         color: const Color(0xff211133),
                         borderRadius: BorderRadius.circular(9)),
@@ -876,9 +928,7 @@ class _Entry extends State<Entry> {
                               color: Color(0xffd7b5ff)))
                     ]))),
             const SizedBox(width: 6),
-            Expanded(
-                flex: 3,
-                child: Info('', status())),
+            Expanded(flex: 3, child: Info('', status())),
             const SizedBox(width: 6),
             SizedBox(
                 height: 50,
@@ -889,8 +939,7 @@ class _Entry extends State<Entry> {
                         context,
                         MaterialPageRoute(builder: (_) => const Login()),
                         (_) => false),
-                    child:
-                        const Text('EXIT', style: TextStyle(fontSize: 11))))
+                    child: const Text('EXIT', style: TextStyle(fontSize: 11))))
           ]),
           const SizedBox(height: 10),
           Row(children: [
@@ -1054,27 +1103,31 @@ class _Entry extends State<Entry> {
                       child: TextButton(
                           onPressed: showResults,
                           style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 1)),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 1)),
                           child: const Text('RESULTS',
                               style: TextStyle(fontSize: 9)))),
                   Expanded(
                       child: TextButton(
                           onPressed: showReports,
                           style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 2)),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 2)),
                           child: const Text('REPORTS',
                               style: TextStyle(fontSize: 10)))),
                   Expanded(
                       child: TextButton(
-                      onPressed: showPreviousBills,
+                          onPressed: showPreviousBills,
                           style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 2)),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 2)),
                           child: const Text('PREVIOUS',
                               style: TextStyle(fontSize: 10)))),
                   Expanded(
                       child: FilledButton(
                           style: FilledButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 4)),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4)),
                           onPressed:
                               saving || cart.isEmpty ? null : () => settle(),
                           child: const Text('OK',
@@ -1084,7 +1137,8 @@ class _Entry extends State<Entry> {
                       flex: 2,
                       child: FilledButton.icon(
                           style: FilledButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 5)),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 5)),
                           onPressed: saving || cart.isEmpty
                               ? null
                               : () => settle(print: true),

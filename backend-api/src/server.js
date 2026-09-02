@@ -780,11 +780,20 @@ function reportSummary(report) {
   const entries = store.tickets.filter((item) => item.reportId === report.id);
   const seller = store.users.find((item) => item.id === report.sellerId);
   const superAdmin = seller ? store.users.find((item) => item.id === seller.parentId && item.role === 'SUPER_ADMIN') : null;
-  return { ...report, superAdminId: superAdmin?.id ?? null, superAdminName: superAdmin?.name ?? '—', entryCount: entries.length, totalQuantity: entries.reduce((sum, item) => sum + item.quantity, 0), totalSales: entries.reduce((sum, item) => sum + item.total, 0), totalPrize: entries.reduce((sum, item) => sum + item.prize, 0) };
+  const totalSales = entries.reduce((sum, item) => sum + Number(item.total ?? 0), 0);
+  const totalPrize = entries.reduce((sum, item) => sum + Number(item.prize ?? 0), 0);
+  const totalBonus = entries.reduce((sum, item) => {
+    const ratedAmount = Number(item.rateSnapshot?.distributorRate ?? item.unitPrice ?? 0) * Number(item.quantity ?? 0);
+    const margin = Math.max(0, Number(item.total ?? 0) - ratedAmount);
+    const percentage = Number(item.rateSnapshot?.sellerCommissionPercentage ?? seller?.commissionPercentage ?? 0);
+    return sum + Math.round(margin * percentage) / 100;
+  }, 0);
+  return { ...report, sellerCode: seller?.sellerCode ?? null, superAdminId: superAdmin?.id ?? null, superAdminCode: superAdmin?.superAdminCode ?? null, superAdminName: superAdmin?.name ?? '—', entryCount: entries.length, totalQuantity: entries.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0), totalSales, totalPrize, totalBonus, totalNet: totalSales - totalPrize - totalBonus };
 }
 function buildSaleReport(report) {
   const seller = store.users.find((item) => item.id === report.sellerId);
   const distributor = store.users.find((item) => item.id === report.distributorId);
+  const superAdmin = seller ? store.users.find((item) => item.id === seller.parentId && item.role === 'SUPER_ADMIN') : null;
   const corrections = store.reportCorrections.filter((item) => item.reportId === report.id);
   const entries = store.tickets.filter((item) => item.reportId === report.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((ticket) => {
     const bill = store.bills.find((item) => item.id === ticket.billId);
@@ -797,7 +806,7 @@ function buildSaleReport(report) {
     const bonusAmount = Math.round(margin * bonusPercentage) / 100;
     return { transactionId: ticket.id, sequence: ticket.transactionSequence, timestamp: ticket.createdAt, date: ticket.businessDate ?? localDateKey(ticket.createdAt), time: new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(ticket.createdAt)), billNumber: bill?.billNumber ?? '—', scheme: ticket.catalogSchemeName ?? ticket.scheme, enteredNumber: ticket.number, quantity: ticket.quantity, rate: Number(ticket.unitPrice), winningNumber: report.winningNumber, matchRule: result.match, unitPrize, prizeAmount, saleAmount: ticket.total, bonusPercentage, bonusAmount, netAmount: Number(ticket.total) - bonusAmount - prizeAmount, corrected: corrections.some((item) => item.transactionId === ticket.id) };
   });
-  return { ...reportSummary(report), totalBonus: entries.reduce((sum, item) => sum + item.bonusAmount, 0), totalNet: entries.reduce((sum, item) => sum + item.netAmount, 0), seller: { id: report.sellerId, name: seller?.name ?? report.sellerName }, distributor: { id: report.distributorId, name: distributor?.name ?? report.distributorName }, entries, corrections: corrections.sort((a, b) => b.changedAt.localeCompare(a.changedAt)) };
+  return { ...reportSummary(report), totalBonus: entries.reduce((sum, item) => sum + item.bonusAmount, 0), totalNet: entries.reduce((sum, item) => sum + item.netAmount, 0), seller: { id: report.sellerId, code: seller?.sellerCode ?? '—', name: seller?.name ?? report.sellerName }, superAdmin: { id: superAdmin?.id ?? null, code: superAdmin?.superAdminCode ?? '—', name: superAdmin?.name ?? '—' }, distributor: { id: report.distributorId, name: distributor?.name ?? report.distributorName }, entries, corrections: corrections.sort((a, b) => b.changedAt.localeCompare(a.changedAt)) };
 }
 
 function buildSellerReportSuite(report) {
