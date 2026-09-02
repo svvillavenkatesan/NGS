@@ -1230,51 +1230,56 @@ class _Entry extends State<Entry> {
                     border: Border(top: BorderSide(color: Color(0xff51326d)))),
                 child: Row(children: [
                   Expanded(
-                      child: TextButton(
+                      flex: 2,
+                      child: OutlinedButton(
                           onPressed: showResults,
-                          style: TextButton.styleFrom(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 1)),
+                          style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 40),
+                              padding: EdgeInsets.zero),
                           child: const Text('RESULTS',
-                              style: TextStyle(fontSize: 9)))),
+                              maxLines: 1, style: TextStyle(fontSize: 9)))),
+                  const SizedBox(width: 3),
                   Expanded(
-                      child: TextButton(
+                      flex: 2,
+                      child: OutlinedButton(
                           onPressed: showReports,
-                          style: TextButton.styleFrom(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 2)),
+                          style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 40),
+                              padding: EdgeInsets.zero),
                           child: const Text('REPORTS',
-                              style: TextStyle(fontSize: 10)))),
+                              maxLines: 1, style: TextStyle(fontSize: 9)))),
+                  const SizedBox(width: 3),
                   Expanded(
-                      child: TextButton(
+                      flex: 3,
+                      child: OutlinedButton(
                           onPressed: showPreviousBills,
-                          style: TextButton.styleFrom(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 2)),
-                          child: const Text('PREVIOUS',
-                              style: TextStyle(fontSize: 10)))),
+                          style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 40),
+                              padding: EdgeInsets.zero),
+                          child: const Text('PREV 5 BILLS',
+                              maxLines: 1, style: TextStyle(fontSize: 8)))),
+                  const SizedBox(width: 3),
                   Expanded(
+                      flex: 2,
                       child: FilledButton(
                           style: FilledButton.styleFrom(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 4)),
+                              minimumSize: const Size(0, 40),
+                              padding: EdgeInsets.zero),
                           onPressed:
                               saving || cart.isEmpty ? null : () => settle(),
                           child: const Text('OK',
                               style: TextStyle(fontSize: 11)))),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 3),
                   Expanded(
                       flex: 2,
-                      child: FilledButton.icon(
+                      child: FilledButton(
                           style: FilledButton.styleFrom(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 5)),
+                              minimumSize: const Size(0, 40),
+                              padding: EdgeInsets.zero),
                           onPressed: saving || cart.isEmpty
                               ? null
                               : () => settle(print: true),
-                          icon: const Icon(Icons.print, size: 16),
-                          label: const Text('OK & PRINT',
-                              style: TextStyle(fontSize: 10))))
+                          child: const Icon(Icons.print, size: 20)))
                 ]))));
   }
 }
