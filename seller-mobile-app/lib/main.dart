@@ -10,8 +10,10 @@ import 'package:printing/printing.dart';
 
 const api = String.fromEnvironment('API_BASE_URL',
     defaultValue: 'http://10.0.2.2:4000');
+const allowHttpLocal =
+    bool.fromEnvironment('ALLOW_HTTP_LOCAL', defaultValue: false);
 void main() {
-  if (kReleaseMode && !api.startsWith('https://')) {
+  if (kReleaseMode && !api.startsWith('https://') && !allowHttpLocal) {
     throw StateError('Release APK requires an HTTPS API_BASE_URL.');
   }
   runApp(const App());
