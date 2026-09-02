@@ -81,7 +81,7 @@ async function renderDashboard() {
   const roleLabel = expectedRole.replaceAll('_', ' ');
   document.querySelector('main').innerHTML = `
     ${expectedRole === 'DISTRIBUTOR' ? `<div class="title-row"><div><p class="muted">${roleLabel} CONTROL CENTER</p><h1>Welcome, ${escapeHtml(currentUser.name)}</h1></div><button class="secondary" id="logout">Sign out</button></div>` : ''}
-    ${expectedRole === 'SUPER_ADMIN' ? '<div class="compact-panel-title"><strong>NGS · SUPER ADMIN PANEL</strong></div><nav class="panel-tabs"><button type="button" class="active" data-panel-tab="overview">Dashboard</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="weekly-accounts">Accounts</button><button type="button" data-panel-tab="results">Results</button><button type="button" data-panel-tab="direct-sellers">Sellers</button><button type="button" data-panel-tab="schemes">Schemes</button><button type="button" data-panel-tab="lot-codes">Lot Codes</button><button type="button" data-panel-tab="security">Security</button><button type="button" data-panel-tab="validity">Validity</button><button type="button" class="seller-exit" id="logout">Exit</button></nav>' : ''}
+    ${expectedRole === 'SUPER_ADMIN' ? '<div class="compact-panel-title"><strong>NGS · SUPER ADMIN PANEL</strong></div><nav class="panel-tabs"><button type="button" class="active" data-panel-tab="overview">Dashboard</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="weekly-accounts">Accounts</button><button type="button" data-panel-tab="results">Results</button><button type="button" data-panel-tab="result-audit">Result Audit</button><button type="button" data-panel-tab="direct-sellers">Sellers</button><button type="button" data-panel-tab="schemes">Schemes</button><button type="button" data-panel-tab="lot-codes">Lot Codes</button><button type="button" data-panel-tab="security">Security</button><button type="button" data-panel-tab="validity">Validity</button><button type="button" class="seller-exit" id="logout">Exit</button></nav>' : ''}
     ${expectedRole === 'DISTRIBUTOR' ? '<nav class="panel-tabs"><button type="button" class="active" data-panel-tab="overview">Overview</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="accounts">Weekly Accounts</button><button type="button" data-panel-tab="sales">Sales</button><button type="button" data-panel-tab="network">Network</button><button type="button" data-panel-tab="schemes">Schemes</button><button type="button" data-panel-tab="results">Results</button></nav>' : ''}
     ${expectedRole === 'SELLER' ? '<nav class="panel-tabs seller-tabs"><button type="button" class="active" data-panel-tab="entry">Entry</button><button type="button" data-panel-tab="results">Results</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="sales">Sales</button><button type="button" data-panel-tab="account">My Account</button><button type="button" class="seller-exit" id="logout">Exit</button></nav>' : ''}
     ${expectedRole !== 'SELLER' ? `<section class="grid">
@@ -94,6 +94,7 @@ async function renderDashboard() {
       ${reportsWorkspace(reports)}
       ${weeklyAccountsPanel(dashboard.weeklyAccounts)}
       <section class="workspace hidden" data-panel="results">${dailyResultsPanel(dashboard.boards, dashboard.recentDraws ?? [], true)}${actionPanel(dashboard)}${profitTargetPanel(dashboard)}${candidatePanel(candidateData)}</section>
+      ${resultAuditPanel(dashboard.recentDraws ?? [])}
       ${directSellerWorkspace(dashboard.boards, dashboard.schemeCatalog, users, dashboard.sellerCapacity)}
       ${schemeCatalogPanel(dashboard.schemeCatalog)}
       ${lotCodePanel(dashboard.boards, dashboard.schemeCatalog)}
@@ -326,6 +327,16 @@ function candidatePanel(data) {
     <div class="candidate-grid">${data.candidates.map((item) => `<button type="button" class="candidate ${item.status.toLowerCase()} ${item.meetsMinimumProfit ? 'eligible' : 'below-target'}" data-candidate="${item.winningNumber}"><span class="number">${item.winningNumber}</span><strong>${money(item.projectedProfit)} (${item.profitPercentage}%)</strong><small>${item.status.replace('_', ' ')} · Prize ${money(item.totalPrizes)}</small><span>${item.meetsMinimumProfit ? 'Select' : `Below ${item.minimumProfitLabel} · Select with warning`}</span></button>`).join('')}</div>
     <p class="muted">Selecting a number only moves it to Publish Result. It is not published automatically.</p></article>`;
 }
+function resultAuditPanel(draws = []) {
+  const locked = draws.filter((draw) => draw.locked && draw.status === 'PUBLISHED');
+  return `<section class="workspace hidden" data-panel="result-audit"><article class="card wide"><p class="muted">POST-PUBLISH · LOCKED RESULT ONLY</p><h2>Result Profit Band Audit</h2>${locked.length ? `<form id="result-audit-form" class="catalog-form"><label>Published Result<select name="drawId">${locked.map((draw) => `<option value="${escapeHtml(draw.id)}">${escapeHtml(draw.resultDate)} · ${escapeHtml(draw.boardCode)} · ${escapeHtml(draw.showLabel)} · ${escapeHtml(draw.winningNumber)}</option>`).join('')}</select></label><button>Calculate Audit</button></form>` : '<p>No published and locked Results available.</p>'}</article><div id="result-audit-output" class="wide"></div></section>`;
+}
+
+function resultAuditHtml(data) {
+  const actual = data.actual ?? {};
+  return `<article class="card wide result-audit-sheet"><div class="title-row compact"><div><p class="muted">LOCKED RESULT AUDIT · ${escapeHtml(data.draw.resultDate)}</p><h2>${escapeHtml(data.draw.boardCode)} · ${escapeHtml(data.draw.showLabel)} · <span class="number">${escapeHtml(data.draw.winningNumber)}</span></h2></div><button type="button" class="secondary" id="print-result-audit">Print Audit</button></div><div class="metrics"><div><span>Ticket Qty</span><strong>${data.ticketQuantity}</strong></div><div><span>Total Sales</span><strong>${money(data.totalSales)}</strong></div><div><span>Actual Prize</span><strong>${money(actual.totalPrizes)}</strong></div><div><span>Actual Profit</span><strong>${money(actual.projectedProfit)}</strong></div><div><span>Actual Profit %</span><strong>${Number(actual.profitPercentage ?? 0)}%</strong></div><div><span>Status</span><strong>LOCKED</strong></div></div><div class="audit-band-list">${data.bands.map((band) => `<details class="audit-band"><summary><strong>${escapeHtml(band.label)}</strong><span>${band.count} numbers</span></summary><div class="audit-numbers">${band.numbers.map((number) => `<span class="${number === data.draw.winningNumber ? 'actual-result' : ''}">${number}</span>`).join('')}</div></details>`).join('')}</div></article>`;
+}
+
 function profitTargetPanel(dashboard) {
   if (expectedRole !== 'SUPER_ADMIN') return '';
   const target = dashboard.minimumProfit ?? { mode: 'PERCENTAGE', value: 20 };
@@ -635,6 +646,15 @@ function wireActions() {
     try { await request('/api/license/renewal-request', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); notify('Renewal request sent to Owner'); await renderDashboard(); switchPanel('validity'); }
     catch (error) { notify(error.message, true); }
   });
+  document.querySelector('#result-audit-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const values = Object.fromEntries(new FormData(event.currentTarget));
+      const data = await request(`/api/reports/result-audit?drawId=${encodeURIComponent(values.drawId)}`);
+      document.querySelector('#result-audit-output').innerHTML = resultAuditHtml(data);
+      document.querySelector('#print-result-audit').onclick = () => printResultAudit(data);
+    } catch (error) { notify(error.message, true); }
+  });
   document.querySelectorAll('[data-panel-tab]').forEach((button) => button.addEventListener('click', () => switchPanel(button.dataset.panelTab)));
   document.querySelectorAll('[data-ticket-filter]').forEach((button) => button.addEventListener('click', () => {
     const card = button.closest('.card');
@@ -705,6 +725,12 @@ function syncResultShows(prefix) {
 function switchPanel(name) {
   document.querySelectorAll('[data-panel]').forEach((panel) => panel.classList.toggle('hidden', panel.dataset.panel !== name));
   document.querySelectorAll('[data-panel-tab]').forEach((button) => button.classList.toggle('active', button.dataset.panelTab === name));
+}
+function printResultAudit(data) {
+  const printWindow = window.open('', '_blank');
+  const rows = data.bands.map((band) => `<tr><th>${escapeHtml(band.label)}<br>${band.count} numbers</th><td>${band.numbers.map(escapeHtml).join(' ')}</td></tr>`).join('');
+  printWindow.document.write(`<!doctype html><html><head><title>Result Audit ${escapeHtml(data.draw.resultDate)}</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial,sans-serif;color:#111;font-size:9px}h1{font-size:18px;margin:0 0 5px}.meta{margin-bottom:10px;font-size:11px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #777;padding:5px;vertical-align:top}th{width:90px;background:#eee}td{line-height:1.55;word-spacing:5px}</style></head><body><h1>LOCKED RESULT PROFIT BAND AUDIT</h1><div class="meta">${escapeHtml(data.draw.resultDate)} · ${escapeHtml(data.draw.boardCode)} · ${escapeHtml(data.draw.showLabel)} · Published Result <strong>${escapeHtml(data.draw.winningNumber)}</strong> · Actual Profit ${money(data.actual?.projectedProfit)} (${Number(data.actual?.profitPercentage ?? 0)}%)</div><table>${rows}</table><script>window.onload=()=>window.print()<\/script></body></html>`);
+  printWindow.document.close();
 }
 async function createDistributor(event) {
   event.preventDefault();

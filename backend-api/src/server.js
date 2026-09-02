@@ -515,6 +515,14 @@ const routes = {
     return created({ bill: buildBill(bill), tickets: records, itemCount: records.length, quantity: records.reduce((sum, item) => sum + item.quantity, 0), total });
   },
   'GET /api/draws': () => ok([...store.draws].reverse()),
+  'GET /api/reports/result-audit': ({ user, url }) => {
+    requireRole(user, 'SUPER_ADMIN');
+    const draw = store.draws.find((item) => item.id === url.searchParams.get('drawId') && item.locked && item.status === 'PUBLISHED');
+    if (!draw) return fail(404, 'Select a published and locked Result');
+    const sellerIds = new Set(descendantsOf(user.id).filter((item) => item.role === 'SELLER').map((item) => item.id));
+    const tickets = store.tickets.filter((ticket) => sellerIds.has(ticket.sellerId) && ticketMatchesScope(ticket, draw));
+    return ok(buildLockedResultAudit(draw, tickets));
+  },
   'POST /api/reports/result-preview': ({ body, user }) => {
     requireRole(user, 'SUPER_ADMIN');
     if (!/^\d{4}$/.test(String(body.winningNumber))) return fail(400, 'Winning number must contain four digits');
@@ -957,9 +965,48 @@ function validateResultPublishTime(scope, user) {
 
 function ticketMatchesResultScope(ticket, scope) {
   if (!scope || ticket.status !== 'ACTIVE') return false;
+  return ticketMatchesScope(ticket, scope);
+}
+
+function ticketMatchesScope(ticket, scope) {
+  if (!scope) return false;
   const ticketShowId = ticket.showId ?? 'all-day';
   const ticketDate = ticket.businessDate ?? localDateKey(ticket.createdAt);
   return ticket.boardId === scope.boardId && ticketShowId === scope.showId && ticketDate === scope.resultDate;
+}
+
+function buildLockedResultAudit(draw, tickets) {
+  const ticketQuantity = tickets.reduce((sum, ticket) => sum + Number(ticket.quantity), 0);
+  const totalSales = tickets.reduce((sum, ticket) => sum + Number(ticket.total), 0);
+  const adminMargin = tickets.reduce((sum, ticket) => sum + Number(ticket.rateSnapshot?.distributorRate ?? ticket.unitPrice) * Number(ticket.quantity), 0);
+  const baseCost = tickets.reduce((sum, ticket) => sum + Number(ticket.rateSnapshot?.minimumRate ?? 0) * Number(ticket.quantity), 0);
+  const bands = [
+    { id: 'loss', label: 'LOSS', minimum: null, maximum: 0, numbers: [] },
+    ...Array.from({ length: 8 }, (_, index) => ({ id: `${index * 10}-${(index + 1) * 10}`, label: `${index * 10}% – ${(index + 1) * 10}%`, minimum: index * 10, maximum: (index + 1) * 10, numbers: [] })),
+    { id: '80-plus', label: '80%+', minimum: 80, maximum: null, numbers: [] }
+  ];
+  let actual = null;
+  for (let value = 0; value <= 9999; value += 1) {
+    const winningNumber = String(value).padStart(4, '0');
+    const totalPrizes = tickets.reduce((sum, ticket) => {
+      const result = evaluateTicket(ticket.number, winningNumber, prizeSchemeForTicket(ticket), ticket.catalogPattern);
+      return sum + result.prize * ticket.quantity;
+    }, 0);
+    const projectedProfit = adminMargin - totalPrizes;
+    const profitPercentage = baseCost > 0 ? projectedProfit / baseCost * 100 : 0;
+    const band = profitPercentage < 0 ? bands[0] : bands.find((item) => item.minimum !== null && item.maximum !== null && profitPercentage >= item.minimum && profitPercentage < item.maximum) ?? bands.at(-1);
+    band.numbers.push(winningNumber);
+    if (winningNumber === draw.winningNumber) actual = { winningNumber, totalPrizes, projectedProfit: Math.round(projectedProfit * 100) / 100, profitPercentage: Math.round(profitPercentage * 100) / 100 };
+  }
+  return {
+    draw: { id: draw.id, boardCode: draw.boardCode, boardName: draw.boardName, showId: draw.showId, showLabel: draw.showLabel, resultDate: draw.resultDate, winningNumber: draw.winningNumber, status: draw.status, locked: draw.locked },
+    ticketQuantity,
+    totalSales,
+    adminMargin,
+    baseCost,
+    actual,
+    bands: bands.map((band) => ({ ...band, count: band.numbers.length }))
+  };
 }
 
 function prizeSchemeForTicket(ticket) {

@@ -122,6 +122,12 @@ body[data-role="SELLER"] .panel-tabs { margin-top: 0; }
 .scheme-toolbar button { flex: 0 0 auto; padding: 7px 12px; }
 .rate-tag { display: inline-block; padding: 5px 8px; margin: 2px; border-radius: 7px; background: #15364d; color: #8ddcff; font-size: 12px; }
 .hidden { display: none !important; }
+.audit-band-list { display: grid; gap: 8px; margin-top: 14px; }
+.audit-band { border: 1px solid #4d3068; border-radius: 10px; background: rgba(255,255,255,.025); overflow: hidden; }
+.audit-band summary { cursor: pointer; padding: 12px 14px; display: flex; justify-content: space-between; gap: 12px; color: #f2c969; }
+.audit-numbers { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 5px; padding: 12px; border-top: 1px solid #4d3068; max-height: 360px; overflow: auto; }
+.audit-numbers span { padding: 6px 4px; border-radius: 6px; text-align: center; background: #170b25; font-weight: 700; font-variant-numeric: tabular-nums; }
+.audit-numbers .actual-result { background: #f1b83c; color: #1c1202; box-shadow: 0 0 0 2px #fff; }
 .panel-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 20px 0 8px; border-bottom: 1px solid #29415c; }
 .panel-tabs button { color: #8ba0ba; background: transparent; border-radius: 8px 8px 0 0; border-bottom: 3px solid transparent; padding: 9px 12px; }
 .panel-tabs button.active { color: #55e7b8; border-bottom-color: #45d6a8; }
