@@ -54,12 +54,16 @@ async function requestPasswordReset() {
 
 async function login(event) {
   event.preventDefault();
-  const submit = event.currentTarget.querySelector('button'); submit.disabled = true;
+  const form = event.currentTarget;
+  const submit = form.querySelector('button'); submit.disabled = true;
   try {
-    const data = await request('/api/auth/login', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) });
+    const data = await request('/api/auth/login', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(form))) });
     if (data.user.role !== expectedRole) throw new Error('Use the correct role portal for this account');
     token = data.token; currentUser = data.user; sessionStorage.setItem(`token:${expectedRole}`, token); await renderDashboard();
-  } catch (error) { event.currentTarget.querySelector('.error').textContent = error.message; submit.disabled = false; }
+  } catch (error) {
+    form.querySelector('.error').textContent = error.message;
+    submit.disabled = false;
+  }
 }
 
 async function renderDashboard() {
