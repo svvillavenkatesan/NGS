@@ -19,18 +19,21 @@ ensureSuperAdminLicenses();
 migrateLegacyReports();
 persistStore();
 
+const normalizeAccountIdentifier = (value) =>
+  String(value ?? '').trim().toUpperCase().replace(/[\s-]+/g, '');
+
 const routes = {
   'GET /health': () => ok({ status: 'ok', service: 'number-game-api' }),
   'POST /api/auth/login': ({ body, req }) => {
-    const identifier = String(body.phone ?? body.userId ?? '').trim().toUpperCase();
-    const account = store.users.find((item) => item.isActive && [item.phone, item.superAdminCode, item.sellerCode].some((value) => String(value ?? '').toUpperCase() === identifier));
+    const identifier = normalizeAccountIdentifier(body.phone ?? body.userId);
+    const account = store.users.find((item) => item.isActive && [item.phone, item.superAdminCode, item.sellerCode].some((value) => normalizeAccountIdentifier(value) === identifier));
     if (!account || !verifyPassword(body.password ?? '', account.passwordHash)) return fail(401, 'User ID / Phone or PWD is incorrect');
     if (account.role === 'SELLER' && process.env.NODE_ENV === 'production' && !isAndroidSellerRequest(req)) return fail(403, 'Seller Entry is available only in the Android app');
     return ok({ token: createToken(account), user: publicUser(account) });
   },
   'POST /api/auth/forgot-password': ({ body }) => {
-    const identifier = String(body.phone ?? body.userId ?? '').trim().toUpperCase();
-    const account = store.users.find((item) => item.isActive && ['SELLER', 'SUPER_ADMIN', 'OWNER'].includes(item.role) && [item.phone, item.superAdminCode, item.sellerCode].some((value) => String(value ?? '').toUpperCase() === identifier));
+    const identifier = normalizeAccountIdentifier(body.phone ?? body.userId);
+    const account = store.users.find((item) => item.isActive && ['SELLER', 'SUPER_ADMIN', 'OWNER'].includes(item.role) && [item.phone, item.superAdminCode, item.sellerCode].some((value) => normalizeAccountIdentifier(value) === identifier));
     if (account) {
       const existing = store.passwordResetRequests.find((item) => item.userId === account.id && item.status === 'PENDING');
       if (!existing) createRecord('passwordResetRequests', { userId: account.id, phone: account.phone, role: account.role, parentId: account.parentId, status: 'PENDING' });
