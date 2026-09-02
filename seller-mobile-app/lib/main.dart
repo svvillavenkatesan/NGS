@@ -165,10 +165,20 @@ class _Entry extends State<Entry> {
   }
 
   Map<String, dynamic>? nextOpenBoard() {
-    for (final item in boards.cast<Map<String, dynamic>>()) {
-      if (nextShowId(item) != null) return item;
-    }
-    return null;
+    final open = boards
+        .cast<Map<String, dynamic>>()
+        .map((item) {
+          final next = nextShowId(item);
+          if (next == null) return null;
+          final show = (item['schedules'] as List)
+              .cast<Map<String, dynamic>>()
+              .firstWhere((entry) => entry['id'] == next);
+          return {'board': item, 'closing': _endMinutes(show)};
+        })
+        .whereType<Map<String, dynamic>>()
+        .toList()
+      ..sort((a, b) => (a['closing'] as int).compareTo(b['closing'] as int));
+    return open.firstOrNull?['board'] as Map<String, dynamic>?;
   }
 
   void selectNextOpenLotCode() {

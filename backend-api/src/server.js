@@ -187,6 +187,15 @@ const routes = {
     if (store.settings.boards.some((item) => item.code === code)) return fail(409, 'Board code already exists');
     const board = { id: `board-${Date.now().toString(36)}`, code, name, enabled: true, schemeIds: store.settings.schemeCatalog.filter((scheme) => scheme.enabled && scheme.universal).map((scheme) => scheme.id), schedules: [] };
     store.settings.boards.push(board);
+    const defaultAccess = validateDistributorLotAssignment(board.id, {});
+    for (const seller of store.users.filter((item) => item.role === 'SELLER' && item.isActive)) {
+      seller.lotCodeSchemeRates = { ...(seller.lotCodeSchemeRates ?? {}), [board.id]: defaultAccess.catalogSchemeRates };
+      seller.lotCodeIds = Object.keys(seller.lotCodeSchemeRates);
+      seller.catalogSchemeRates = mergeCatalogSchemeRates(seller.lotCodeSchemeRates);
+      seller.schemeRates = deriveNumberTypeRates(seller.catalogSchemeRates);
+      seller.lotCodeGraceMinutes = { ...(seller.lotCodeGraceMinutes ?? {}), [board.id]: validateGraceMinutes() };
+      seller.excludedLotCodeIds = (seller.excludedLotCodeIds ?? []).filter((id) => id !== board.id);
+    }
     audit(user.id, 'BOARD_CREATED', 'board', null, board);
     return created(board);
   },
@@ -290,13 +299,15 @@ const routes = {
     const currentSellers = activeSellerCount(user.id);
     const sellerLimit = Number(store.users.find((item) => item.id === user.id)?.sellerLimit ?? store.settings.maxSellers ?? 2000);
     if (currentSellers >= sellerLimit) return fail(409, `Seller limit reached for Super Admin ${user.superAdminCode ?? user.id} (${sellerLimit}). Contact System Owner.`);
-    let schemeRates;
-    let distributorAccess;
-    distributorAccess = validateDistributorLotAssignment(body.lotCodeId, body.catalogSchemeRates);
-    schemeRates = deriveNumberTypeRates(distributorAccess.catalogSchemeRates);
+    const primaryAccess = validateDistributorLotAssignment(body.lotCodeId, body.catalogSchemeRates);
+    const allAccess = store.settings.boards.filter((item) => item.enabled).map((board) => board.id === primaryAccess.lotCodeId ? primaryAccess : validateDistributorLotAssignment(board.id, {}));
+    const lotCodeSchemeRates = Object.fromEntries(allAccess.map((access) => [access.lotCodeId, access.catalogSchemeRates]));
+    const catalogSchemeRates = mergeCatalogSchemeRates(lotCodeSchemeRates);
+    const schemeRates = deriveNumberTypeRates(catalogSchemeRates);
+    const lotCodeGraceMinutes = Object.fromEntries(allAccess.map((access) => [access.lotCodeId, access.lotCodeId === primaryAccess.lotCodeId ? validateGraceMinutes(body.graceMinutes) : validateGraceMinutes()]));
     const commissionPercentage = body.role === 'SELLER' ? Number(body.commissionPercentage ?? 0) : 0;
     if (body.role === 'SELLER' && (!Number.isFinite(commissionPercentage) || commissionPercentage < 0 || commissionPercentage > 50)) return fail(400, 'Seller commission percentage must be between 0 and 50');
-    const record = createRecord('users', { parentId: user.id, role: 'SELLER', sellerCode: nextSellerCode(user.id), name: body.name.trim(), phone: String(body.phone), passwordHash: hashPassword(body.password), isActive: true, commissionPercentage, schemeRates, lotCodeGraceMinutes: { [distributorAccess.lotCodeId]: validateGraceMinutes(body.graceMinutes) }, ...distributorAccess });
+    const record = createRecord('users', { parentId: user.id, role: 'SELLER', sellerCode: nextSellerCode(user.id), name: body.name.trim(), phone: String(body.phone), passwordHash: hashPassword(body.password), isActive: true, commissionPercentage, schemeRates, lotCodeIds: Object.keys(lotCodeSchemeRates), lotCodeSchemeRates, catalogSchemeRates, lotCodeGraceMinutes, excludedLotCodeIds: [] });
     audit(user.id, 'USER_CREATED', 'user', record.id, { role: record.role });
     return created(publicUser(record));
   },
@@ -319,6 +330,18 @@ const routes = {
     requireActionPassword(body, user, 'management');
     const seller = store.users.find((item) => item.id === body.sellerId && item.role === 'SELLER' && item.parentId === user.id);
     if (!seller) return fail(404, 'Seller not found');
+    if (body.removeLotCode === true || body.removeLotCode === 'true') {
+      if (!(seller.lotCodeIds ?? []).includes(String(body.lotCodeId))) return fail(404, 'Seller Lot Code assignment not found');
+      if ((seller.lotCodeIds ?? []).length <= 1) return fail(409, 'A Seller must have at least one Lot Code');
+      delete seller.lotCodeSchemeRates?.[body.lotCodeId];
+      delete seller.lotCodeGraceMinutes?.[body.lotCodeId];
+      seller.lotCodeIds = Object.keys(seller.lotCodeSchemeRates ?? {});
+      seller.catalogSchemeRates = mergeCatalogSchemeRates(seller.lotCodeSchemeRates);
+      seller.schemeRates = deriveNumberTypeRates(seller.catalogSchemeRates);
+      seller.excludedLotCodeIds = [...new Set([...(seller.excludedLotCodeIds ?? []), String(body.lotCodeId)])];
+      audit(user.id, 'SELLER_LOT_CODE_REMOVED', 'user', seller.id, { lotCodeId: body.lotCodeId });
+      return ok(publicUser(seller));
+    }
     const access = validateDistributorLotAssignment(body.lotCodeId, body.catalogSchemeRates);
     const commissionPercentage = Number(body.commissionPercentage ?? seller.commissionPercentage ?? 0);
     if (!Number.isFinite(commissionPercentage) || commissionPercentage < 0 || commissionPercentage > 50) return fail(400, 'Seller commission percentage must be between 0 and 50');
@@ -328,6 +351,7 @@ const routes = {
     seller.schemeRates = deriveNumberTypeRates(seller.catalogSchemeRates);
     seller.commissionPercentage = commissionPercentage;
     seller.lotCodeGraceMinutes = { ...(seller.lotCodeGraceMinutes ?? {}), [access.lotCodeId]: validateGraceMinutes(body.graceMinutes) };
+    seller.excludedLotCodeIds = (seller.excludedLotCodeIds ?? []).filter((id) => id !== access.lotCodeId);
     audit(user.id, 'SELLER_SETTINGS_UPDATED', 'user', seller.id, { lotCodeId: access.lotCodeId, catalogSchemeRates: access.catalogSchemeRates, commissionPercentage, graceMinutes: seller.lotCodeGraceMinutes[access.lotCodeId] });
     return ok(publicUser(seller));
   },

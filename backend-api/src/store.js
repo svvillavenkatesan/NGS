@@ -132,6 +132,18 @@ for (const admin of superAdminsByCreation) {
     usedSellerCodes.add(seller.sellerCode);
   }
 }
+for (const seller of store.users.filter((item) => item.role === 'SELLER')) {
+  seller.lotCodeSchemeRates ??= {};
+  seller.lotCodeGraceMinutes ??= {};
+  seller.excludedLotCodeIds ??= [];
+  for (const board of store.settings.boards.filter((item) => item.enabled && !seller.excludedLotCodeIds.includes(item.id))) {
+    if (seller.lotCodeSchemeRates[board.id]) continue;
+    seller.lotCodeSchemeRates[board.id] = Object.fromEntries(store.settings.schemeCatalog.filter((scheme) => scheme.enabled && scheme.universal && board.schemeIds.includes(scheme.id)).map((scheme) => [scheme.id, { enabled: true, rate: Number(scheme.mrp ?? scheme.defaultRate ?? 0) }]));
+    seller.lotCodeGraceMinutes[board.id] = Object.fromEntries(['show1', 'show2', 'show3', 'show4', 'show5'].map((id) => [id, 0]));
+  }
+  seller.lotCodeIds = Object.keys(seller.lotCodeSchemeRates).filter((id) => !seller.excludedLotCodeIds.includes(id));
+  seller.catalogSchemeRates = Object.assign({}, ...seller.lotCodeIds.map((id) => seller.lotCodeSchemeRates[id] ?? {}));
+}
 store.saleReports ??= [];
 store.reportCorrections ??= [];
 store.passwordResetRequests ??= [];

@@ -216,7 +216,7 @@ function directSellerWorkspace(lotCodes = [], catalog = [], users = [], capacity
   return `<section class="workspace hidden" data-panel="direct-sellers"><article class="card wide"><h2>Seller Capacity</h2><div class="metrics"><div><span>Maximum</span><strong>${Number(capacity.maximum ?? 0)}</strong></div><div><span>Active Sellers</span><strong>${Number(capacity.current ?? 0)}</strong></div><div><span>Remaining</span><strong>${Number(capacity.remaining ?? 0)}</strong></div></div></article>${directSellerPanel(lotCodes, catalog, directSellers)}${usersPanel(directSellers)}</section>`;
 }
 function directSellerPanel(lotCodes = [], catalog = [], sellers = []) {
-  return `<article class="card wide"><p class="muted">DIRECT SELLER</p><h2>Select Seller</h2><p class="muted">Select an existing Seller to update Lot Code and Scheme access, or choose + Add Seller to create a new account.</p><form id="direct-seller-form" class="catalog-form"><input type="hidden" name="role" value="SELLER"><label>Select Seller<select name="sellerId" id="direct-seller-selector"><option value="">+ Add Seller</option>${sellers.map((seller) => `<option value="${escapeHtml(seller.id)}">${escapeHtml(seller.sellerCode ?? '')} · ${escapeHtml(seller.name)} · ${escapeHtml(seller.phone)}</option>`).join('')}</select></label><div id="new-direct-seller-fields"><label>Seller name<input name="name" required></label><label>Mobile number<input name="phone" inputmode="numeric" pattern="[0-9]{10,15}" required></label><label>Temporary password<input name="password" type="password" minlength="8" autocomplete="new-password" required></label></div><label>Lot Code<select name="lotCodeId" id="direct-seller-lot-code">${lotCodes.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.code)} - ${escapeHtml(item.name)}</option>`).join('')}</select></label><fieldset class="scheme-rates"><legend>Common Schemes</legend><div>${catalog.filter((scheme) => scheme.universal).map((scheme) => `<span class="rate-tag">${escapeHtml(scheme.name)}</span>`).join(' ')}</div></fieldset><fieldset class="scheme-rates"><legend>Select 3D / 4D Schemes</legend><div class="scheme-toolbar"><p class="muted">Only schemes allowed for the selected Lot Code are shown.</p><button type="button" class="secondary" id="select-all-direct-seller-schemes">Select All</button></div><div class="subscheme-grid compact-scheme-grid">${catalog.filter((scheme) => !scheme.universal).map((scheme) => { const allowedLots = lotCodes.filter((lot) => lot.schemeIds?.includes(scheme.id)).map((lot) => lot.id).join(' '); return `<label class="check direct-seller-scheme" data-lot-ids="${escapeHtml(allowedLots)}"><input type="checkbox" name="direct_scheme_${scheme.id}" value="${escapeHtml(scheme.id)}"> ${escapeHtml(scheme.name)}</label>`; }).join('')}</div></fieldset>${sellerGracePanel(lotCodes)}<label>Commission %<input name="commissionPercentage" type="number" min="0" max="50" step="0.01" value="0" required></label><label>Management Password<input name="actionPassword" type="password" required></label><button id="save-direct-seller">Create Direct Seller</button></form></article>`;
+  return `<article class="card wide"><p class="muted">DIRECT SELLER</p><h2>Select Seller</h2><form id="direct-seller-form" class="catalog-form"><input type="hidden" name="role" value="SELLER"><label>Select Seller<select name="sellerId" id="direct-seller-selector"><option value="">+ Add Seller</option>${sellers.map((seller) => `<option value="${escapeHtml(seller.id)}">${escapeHtml(seller.sellerCode ?? '')} · ${escapeHtml(seller.name)} · ${escapeHtml(seller.phone)}</option>`).join('')}</select></label><div id="new-direct-seller-fields"><label>Seller name<input name="name" required></label><label>Mobile number<input name="phone" inputmode="numeric" pattern="[0-9]{10,15}" required></label><label>Temporary password<input name="password" type="password" minlength="8" autocomplete="new-password" required></label></div><label>Lot Code<select name="lotCodeId" id="direct-seller-lot-code">${lotCodes.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.code)} - ${escapeHtml(item.name)}</option>`).join('')}</select></label><label class="check" id="seller-lot-enabled-label"><input type="checkbox" name="lotCodeEnabled" id="seller-lot-enabled" checked> Enable this Lot Code</label><fieldset class="scheme-rates"><legend>Common Schemes</legend><div>${catalog.filter((scheme) => scheme.universal).map((scheme) => `<span class="rate-tag">${escapeHtml(scheme.name)}</span>`).join(' ')}</div></fieldset><fieldset class="scheme-rates"><legend>Select 3D / 4D Schemes</legend><div class="scheme-toolbar"><button type="button" class="secondary" id="select-all-direct-seller-schemes">Select All</button></div><div class="subscheme-grid compact-scheme-grid">${catalog.filter((scheme) => !scheme.universal).map((scheme) => { const allowedLots = lotCodes.filter((lot) => lot.schemeIds?.includes(scheme.id)).map((lot) => lot.id).join(' '); return `<label class="check direct-seller-scheme" data-lot-ids="${escapeHtml(allowedLots)}"><input type="checkbox" name="direct_scheme_${scheme.id}" value="${escapeHtml(scheme.id)}"> ${escapeHtml(scheme.name)}</label>`; }).join('')}</div></fieldset>${sellerGracePanel(lotCodes)}<label>Commission %<input name="commissionPercentage" type="number" min="0" max="50" step="0.01" value="0" required></label><label>Management Password<input name="actionPassword" type="password" required></label><button id="save-direct-seller">Create Direct Seller</button></form></article>`;
 }
 function sellerGracePanel(lotCodes = []) {
   const showIds = ['show1', 'show2', 'show3', 'show4', 'show5'];
@@ -464,8 +464,9 @@ function wireActions() {
     const graceMinutes = Object.fromEntries(['show1', 'show2', 'show3', 'show4', 'show5'].map((id) => [id, Number(values[`grace_${id}`] ?? 0)]));
     try {
       if (values.sellerId) {
-        await request('/api/users/seller-settings', { method: 'PUT', body: JSON.stringify({ sellerId: values.sellerId, lotCodeId: values.lotCodeId, catalogSchemeRates, commissionPercentage: Number(values.commissionPercentage), graceMinutes, actionPassword: values.actionPassword }) });
-        notify('Seller Lot Code and Scheme access updated');
+        const enabled = values.lotCodeEnabled === 'on';
+        await request('/api/users/seller-settings', { method: 'PUT', body: JSON.stringify(enabled ? { sellerId: values.sellerId, lotCodeId: values.lotCodeId, catalogSchemeRates, commissionPercentage: Number(values.commissionPercentage), graceMinutes, actionPassword: values.actionPassword } : { sellerId: values.sellerId, lotCodeId: values.lotCodeId, removeLotCode: true, actionPassword: values.actionPassword }) });
+        notify(enabled ? 'Seller Lot Code and Scheme access updated' : 'Seller Lot Code removed');
       } else {
         await request('/api/users', { method: 'POST', body: JSON.stringify({ ...values, catalogSchemeRates, graceMinutes }) });
         notify('Direct Seller created under Super Admin');
@@ -550,7 +551,7 @@ function wireActions() {
     input.maxLength = Number(length); input.pattern = `[0-9]{${length}}`; input.placeholder = '0'.repeat(Number(length)); input.value = '';
     updateSaleTotal();
   });
-  syncSellerCatalogSelection(); updateSaleTotal();
+  selectCurrentSellerScope(); syncSellerCatalogSelection(); updateSaleTotal();
   if (expectedRole === 'SELLER') {
     clearInterval(sellerClockTimer);
     updateSellerClock();
@@ -728,6 +729,8 @@ function loadDirectSellerSettings(preserveLot = false) {
   const lotCode = document.querySelector('#direct-seller-lot-code');
   if (lotCode && !preserveLot) lotCode.value = seller?.lotCodeIds?.[0] ?? currentDashboard.boards[0]?.id ?? '';
   const selectedLot = lotCode?.value;
+  const lotEnabled = document.querySelector('#seller-lot-enabled');
+  if (lotEnabled) { lotEnabled.checked = seller ? Boolean(seller.lotCodeIds?.includes(selectedLot)) : true; lotEnabled.disabled = !seller; }
   document.querySelectorAll('.direct-seller-scheme').forEach((label) => {
     const allowed = label.dataset.lotIds.split(' ').includes(selectedLot);
     label.hidden = !allowed;
@@ -870,6 +873,26 @@ function uniqueNumberPermutations(number) {
   };
   visit('', String(number));
   return [...output];
+}
+function selectCurrentSellerScope() {
+  if (expectedRole !== 'SELLER') return;
+  const indiaNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const secondsNow = indiaNow.getHours() * 3600 + indiaNow.getMinutes() * 60 + indiaNow.getSeconds();
+  const candidates = (currentDashboard?.boards ?? []).flatMap((board) => (board.schedules ?? []).filter((show) => show.enabled && show.startTime && show.endTime).map((show) => {
+    const [startHour, startMinute] = show.startTime.split(':').map(Number);
+    const [endHour, endMinute] = (show.effectiveEndTime ?? show.endTime).split(':').map(Number);
+    return { board, show, startSeconds: startHour * 3600 + startMinute * 60, endSeconds: endHour * 3600 + endMinute * 60 + 59 };
+  })).filter((item) => item.startSeconds <= secondsNow && item.endSeconds >= secondsNow).sort((a, b) => a.endSeconds - b.endSeconds);
+  const current = candidates[0];
+  if (!current) return;
+  const boardSelect = document.querySelector('#board');
+  if (!boardSelect) return;
+  boardSelect.value = current.board.id;
+  boardSelect.dispatchEvent(new Event('change'));
+  const showSelect = document.querySelector('#seller-show');
+  if (showSelect) showSelect.value = current.show.id;
+  document.querySelectorAll('.lot-code-choice').forEach((button) => button.classList.toggle('active', button.dataset.boardChoice === current.board.id));
+  updateSellerClock();
 }
 function updateSellerClock() {
   if (expectedRole !== 'SELLER') return;

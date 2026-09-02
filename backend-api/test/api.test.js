@@ -34,7 +34,7 @@ test('NGS direct Seller workflow', async (context) => {
   assert.equal(directSeller.data.parentId, 'admin-1');
   assert.equal(directSeller.data.role, 'SELLER');
   assert.equal(directSeller.data.sellerCode, '01002');
-  assert.deepEqual(directSeller.data.lotCodeIds, ['kerala']);
+  assert.deepEqual(directSeller.data.lotCodeIds, ['kerala', 'dear']);
   assert.equal(directSeller.data.commissionPercentage, 20);
 
   const updatedSeller = await json('/api/users/seller-settings', admin, { method: 'PUT', body: JSON.stringify({ sellerId: directSeller.data.id, lotCodeId: 'dear', catalogSchemeRates: { 'scheme-a': { enabled: true, rate: 10.6 }, 'scheme-4d-60-2l': { enabled: true, rate: 39 } }, commissionPercentage: 25, graceMinutes: { show1: 2, show2: 0, show3: 5 }, actionPassword: 'Admin@123' }) });
@@ -70,7 +70,11 @@ test('NGS direct Seller workflow', async (context) => {
   assert.equal(branchSeller.response.status, 201);
   assert.equal(branchSeller.data.parentId, newAdminOne.data.id);
   assert.equal(branchSeller.data.sellerCode, '02001');
+  assert.deepEqual(branchSeller.data.lotCodeIds, ['kerala', 'dear']);
   await login('02001', 'Seller@321');
+  const removedBranchLot = await json('/api/users/seller-settings', branchAdmin, { method: 'PUT', body: JSON.stringify({ sellerId: branchSeller.data.id, lotCodeId: 'dear', removeLotCode: true, actionPassword: 'Branch@123' }) });
+  assert.equal(removedBranchLot.response.status, 200);
+  assert.deepEqual(removedBranchLot.data.lotCodeIds, ['kerala']);
   const branchOverLimit = await json('/api/users', branchAdmin, { method: 'POST', body: JSON.stringify({ role: 'SELLER', name: 'Branch Seller Two', phone: '9777777782', password: 'Seller@322', lotCodeId: 'kerala', catalogSchemeRates: { 'scheme-a': { enabled: true, rate: 10.6 } }, commissionPercentage: 0, actionPassword: 'Branch@123' }) });
   assert.equal(branchOverLimit.response.status, 409);
 
@@ -133,6 +137,12 @@ test('NGS direct Seller workflow', async (context) => {
   const resetAdmin = await json('/api/owner/super-admin-password-reset', owner, { method: 'PUT', body: JSON.stringify({ superAdminId: newAdminTwo.data.id, newPassword: 'Reset@124', ownerPassword: 'Owner@123' }) });
   assert.equal(resetAdmin.response.status, 200);
   await login('9777777772', 'Reset@124');
+
+  const newLotCode = await json('/api/settings/boards', admin, { method: 'POST', body: JSON.stringify({ code: 'TS', name: 'Test State', actionPassword: 'Admin@123' }) });
+  assert.equal(newLotCode.response.status, 201);
+  const usersAfterNewLot = await json('/api/users', admin);
+  assert.equal(usersAfterNewLot.data.every((item) => item.lotCodeIds.includes(newLotCode.data.id)), true);
+  assert.equal(usersAfterNewLot.data.every((item) => Object.keys(item.lotCodeSchemeRates[newLotCode.data.id]).length === 8), true);
 
   const renewalAccount = store.users.find((item) => item.id === newAdminOne.data.id);
   const renewalStart = new Date(); renewalStart.setUTCMonth(renewalStart.getUTCMonth() - 6); renewalStart.setUTCDate(renewalStart.getUTCDate() + 10);
