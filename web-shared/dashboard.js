@@ -96,7 +96,7 @@ async function renderDashboard() {
   const roleLabel = expectedRole.replaceAll('_', ' ');
   document.querySelector('main').innerHTML = `
     ${expectedRole === 'DISTRIBUTOR' ? `<div class="title-row"><div><p class="muted">${roleLabel} CONTROL CENTER</p><h1>Welcome, ${escapeHtml(currentUser.name)}</h1></div><button class="secondary" id="logout">Sign out</button></div>` : ''}
-    ${expectedRole === 'SUPER_ADMIN' ? '<div class="compact-panel-title"><strong>NGS · SUPER ADMIN PANEL</strong></div><nav class="panel-tabs"><button type="button" class="active" data-panel-tab="overview">Dashboard</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="results">Results</button><button type="button" data-panel-tab="result-correction">Result Correction</button><button type="button" data-panel-tab="result-audit">Result Audit</button><button type="button" data-panel-tab="direct-sellers">Sellers</button><button type="button" data-panel-tab="schemes">Schemes</button><button type="button" data-panel-tab="lot-codes">Lot Codes</button><button type="button" data-panel-tab="security">Security</button><button type="button" data-panel-tab="validity">Validity</button><button type="button" class="seller-exit" id="logout">Exit</button></nav>' : ''}
+    ${expectedRole === 'SUPER_ADMIN' ? '<div class="compact-panel-title"><strong>NGS · SUPER ADMIN PANEL</strong></div><nav class="panel-tabs"><button type="button" class="active" data-panel-tab="overview">Dashboard</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="seller-daily">Seller Daily Accounts</button><button type="button" data-panel-tab="results">Results</button><button type="button" data-panel-tab="result-correction">Result Correction</button><button type="button" data-panel-tab="result-audit">Result Audit</button><button type="button" data-panel-tab="direct-sellers">Sellers</button><button type="button" data-panel-tab="schemes">Schemes</button><button type="button" data-panel-tab="lot-codes">Lot Codes</button><button type="button" data-panel-tab="security">Security</button><button type="button" data-panel-tab="validity">Validity</button><button type="button" class="seller-exit" id="logout">Exit</button></nav>' : ''}
     ${expectedRole === 'DISTRIBUTOR' ? '<nav class="panel-tabs"><button type="button" class="active" data-panel-tab="overview">Overview</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="accounts">Weekly Accounts</button><button type="button" data-panel-tab="sales">Sales</button><button type="button" data-panel-tab="network">Network</button><button type="button" data-panel-tab="schemes">Schemes</button><button type="button" data-panel-tab="results">Results</button></nav>' : ''}
     ${expectedRole === 'SELLER' ? '<nav class="panel-tabs seller-tabs"><button type="button" class="active" data-panel-tab="entry">Entry</button><button type="button" data-panel-tab="results">Results</button><button type="button" data-panel-tab="reports">Reports</button><button type="button" data-panel-tab="sales">Sales</button><button type="button" data-panel-tab="account">My Account</button><button type="button" class="seller-exit" id="logout">Exit</button></nav>' : ''}
     ${expectedRole !== 'SELLER' ? `<section class="grid">
@@ -105,8 +105,9 @@ async function renderDashboard() {
       <article class="card"><span class="muted">${expectedRole === 'DISTRIBUTOR' ? 'Weekly margin' : 'Net profit'}</span><strong>${money(expectedRole === 'DISTRIBUTOR' ? dashboard.distributorAccounts?.margin : dashboard.bonus.netProfit)}</strong></article><article class="card"><span class="muted">Tickets / Network</span><strong>${dashboard.quantity} / ${dashboard.users}</strong></article>
     </section>` : ''}
     ${expectedRole === 'SUPER_ADMIN' ? `
-      <section class="workspace" data-panel="overview">${performancePanel(dashboard.directSellerPerformance, dashboard.latestDraw)}${ticketsPanel(dashboard.recentTickets)}</section>
-      ${reportsWorkspace(reports, dashboard.weeklyAccounts)}
+      <section class="workspace" data-panel="overview">${performancePanel(dashboard.directSellerPerformance, dashboard.latestDraw)}</section>
+      ${reportsWorkspace(reports)}
+      <section class="workspace hidden" data-panel="seller-daily">${dailySellerAccountsPanel()}</section>
       <section class="workspace hidden" data-panel="results">${dailyResultsPanel(dashboard.boards, dashboard.recentDraws ?? [], true)}<dialog id="result-publish-dialog" class="result-publish-dialog"></dialog></section>
       ${resultCorrectionPanel(dashboard.recentDraws ?? [], resultCorrections)}
       ${resultAuditPanel(dashboard.recentDraws ?? [])}
@@ -325,6 +326,7 @@ function ticketsPanel(tickets) {
   return `<article class="card wide"><h2>Recent ticket activity</h2>${tickets.length ? `${filters}<table><thead><tr><th>Lot Code</th><th>Show</th><th>Number</th><th>Scheme</th><th>Qty</th><th>Status</th><th>Prize</th></tr></thead><tbody>${tickets.map((ticket) => `<tr data-ticket-board="${escapeHtml(ticket.boardId)}"><td>${escapeHtml(ticket.boardName ?? '-')}</td><td>${escapeHtml(ticket.showLabel ?? '-')}</td><td class="number">${ticket.number}</td><td>${ticket.scheme.replaceAll('_', ' ')}</td><td>${ticket.quantity}</td><td>${ticket.status}</td><td>${money(ticket.prize)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Tickets will appear here after seller sales.</p>'}</article>`;
 }
 function weeklyAccountsPanel(accounts = {}, embedded = false) {
+
   const rows = accounts.rows ?? [];
   const days = accounts.days ?? [];
   const content = `
@@ -346,6 +348,49 @@ function candidatePanel(data) {
   return `<article class="card wide" id="candidate-panel"><div class="title-row compact"><div><h2>Sold-number profit options</h2><p class="muted">Top ${data.candidates.length} of ${data.availableUniqueNumbers} unique sold numbers for the selected Lot Code, Show, and Date.</p></div></div>
     <div class="candidate-grid">${data.candidates.map((item) => `<button type="button" class="candidate ${item.status.toLowerCase()} ${item.meetsMinimumProfit ? 'eligible' : 'below-target'}" data-candidate="${item.winningNumber}"><span class="number">${item.winningNumber}</span><strong>${money(item.projectedProfit)} (${item.profitPercentage}%)</strong><small>${item.status.replace('_', ' ')} · Prize ${money(item.totalPrizes)}</small><span>${item.meetsMinimumProfit ? 'Select' : `Below ${item.minimumProfitLabel} · Select with warning`}</span></button>`).join('')}</div>
     <p class="muted">Selecting a number only moves it to Publish Result. It is not published automatically.</p></article>`;
+}
+function dailySellerAccountsPanel() {
+  const sellers = currentUsers.filter((user) => user.role === 'SELLER' && user.parentId === currentUser.id);
+  return `<article class="card wide" id="seller-daily-accounts"><h2>Seller Daily Accounts</h2><form id="daily-account-filter" class="catalog-form"><label>Seller<select name="sellerId" required><option value="">Select Seller</option>${sellers.map((seller) => `<option value="${escapeHtml(seller.id)}">${escapeHtml(seller.sellerCode ?? '')} · ${escapeHtml(seller.name)}</option>`).join('')}</select></label><label>From<input type="date" name="from" value="${indiaDateOffset(-14)}" required></label><label>To<input type="date" name="to" value="${indiaDateOffset()}" max="${indiaDateOffset()}" required></label><button>View Daily Accounts</button></form><div id="daily-account-content"></div><dialog id="daily-payment-dialog"></dialog></article>`;
+}
+
+let dailyAccountRequest = 0;
+async function loadDailyAccounts() {
+  const form = document.querySelector('#daily-account-filter');
+  const serial = ++dailyAccountRequest;
+  const content = document.querySelector('#daily-account-content');
+  if (!form || !content) return;
+  if (!form.reportValidity()) { content.textContent = ''; return; }
+  content.textContent = 'Loading…';
+  try {
+    const data = await request(`/api/reports/seller-daily?${new URLSearchParams(new FormData(form))}`);
+    if (serial !== dailyAccountRequest || !content.isConnected) return;
+    const balanceLabel = (balance) => balance > 0 ? 'Seller to Pay' : balance < 0 ? 'Seller to Receive' : 'No balance';
+    content.innerHTML = `<div class="suite-print-area"><div class="report-suite-heading"><h3>${escapeHtml(data.seller.code)} · ${escapeHtml(data.seller.name)} · ${escapeHtml(data.from)} — ${escapeHtml(data.to)}</h3><button type="button" class="print-suite-report" data-print-title="Seller Daily Accounts">Print</button></div><div class="bill-table"><table><thead><tr><th>Date</th><th>Sales</th><th>Prize</th><th>Bonus</th><th>Day Net</th><th>Seller Paid</th><th>Seller Received</th><th>Balance</th><th>Status</th><th>Payment</th></tr></thead><tbody>${data.days.map((day, index) => `<tr><td>${escapeHtml(day.date)}</td><td>${money(day.sales)}</td><td>${money(day.prize)}</td><td>${money(day.bonus)}</td><td>${money(day.net)}</td><td>${money(day.received)}</td><td>${money(day.paid)}</td><td>${balanceLabel(day.balance)}<br><strong>${money(Math.abs(day.balance))}</strong></td><td>${day.provisional ? 'Provisional · ' : ''}${day.settled ? (day.provisional ? 'Paid to date' : 'Settled') : day.balance ? 'Pending' : 'No activity'}</td><td>${day.balance ? `<button type="button" data-day-payment="${index}">${day.balance > 0 ? 'Seller Paid' : 'Seller Received'}</button><label><input type="checkbox" data-day-settle="${index}"> Settle full</label>` : `<input type="checkbox" aria-label="Settled ${escapeHtml(day.date)}" ${day.settled ? 'checked' : ''} disabled>`}</td></tr>`).join('')}</tbody></table></div></div>${data.legacyPayments.length ? `<details><summary>Previous weekly payments — not allocated to a day (${data.legacyPayments.length})</summary><table><thead><tr><th>Week</th><th>Received</th><th>Reference</th></tr></thead><tbody>${data.legacyPayments.map((payment) => `<tr><td>${escapeHtml(payment.weekStart)}</td><td>${money(payment.amount)}</td><td>${escapeHtml(payment.reference)}</td></tr>`).join('')}</tbody></table></details>` : ''}<details><summary>Payment History</summary><table><thead><tr><th>Account Date</th><th>Recorded At</th><th>Direction</th><th>Amount</th><th>Reference</th></tr></thead><tbody>${data.days.flatMap((day) => day.transactions.map((payment) => `<tr><td>${escapeHtml(day.date)}</td><td>${escapeHtml(new Date(payment.createdAt).toLocaleString('en-IN'))}</td><td>${payment.direction === 'RECEIVED' ? 'Seller Paid' : 'Seller Received'}</td><td>${money(payment.amount)}</td><td>${escapeHtml(payment.reference)}</td></tr>`)).join('') || '<tr><td colspan="5">No payments</td></tr>'}</tbody></table></details>`;
+    content.querySelectorAll('[data-day-payment]').forEach((button) => button.addEventListener('click', () => openDailyPayment(data, data.days[Number(button.dataset.dayPayment)], false)));
+    content.querySelectorAll('[data-day-settle]').forEach((checkbox) => checkbox.addEventListener('change', () => { checkbox.checked = false; openDailyPayment(data, data.days[Number(checkbox.dataset.daySettle)], true); }));
+    wireSuitePrintButtons();
+  } catch (error) { if (serial === dailyAccountRequest) content.textContent = error.message; }
+}
+
+function openDailyPayment(account, day, settle) {
+  const dialog = document.querySelector('#daily-payment-dialog');
+  const direction = day.balance > 0 ? 'RECEIVED' : 'PAID';
+  const requestId = crypto.randomUUID();
+  dialog.innerHTML = `<form id="daily-payment-form"><h3>${direction === 'RECEIVED' ? 'Seller Paid' : 'Seller Received'}</h3><p>${escapeHtml(account.seller.name)} · ${escapeHtml(day.date)}</p><label>Amount<input name="amount" type="number" step="0.01" min="0.01" max="${Math.abs(day.balance)}" value="${Math.abs(day.balance)}" ${settle ? 'readonly' : ''} required></label><label>Reference<input name="reference" maxlength="200"></label><label>Mgt. PWD<input name="actionPassword" type="password" required></label><p>This records an already completed payment. No money is transferred.</p><p class="daily-payment-error error"></p><button>Confirm ${settle ? 'Full Settlement' : 'Payment'}</button><button type="button" class="secondary" id="daily-payment-cancel">Cancel</button></form>`;
+  dialog.querySelector('#daily-payment-cancel').onclick = () => dialog.close();
+  dialog.querySelector('form').onsubmit = async (event) => {
+    event.preventDefault();
+    const button = event.currentTarget.querySelector('button');
+    button.disabled = true;
+    try {
+      await request('/api/seller-daily-payments', { method: 'POST', body: JSON.stringify({ ...Object.fromEntries(new FormData(event.currentTarget)), sellerId: account.seller.id, accountDate: day.date, expectedBalance: day.balance, direction, settle, requestId }) });
+      dialog.close();
+      await loadDailyAccounts();
+    } catch (error) { dialog.querySelector('.daily-payment-error').textContent = error.message; }
+    finally { button.disabled = false; }
+  };
+  dialog.showModal();
 }
 function resultAuditPanel(draws = []) {
   const locked = draws.filter((draw) => draw.locked && draw.status === 'PUBLISHED');
@@ -382,18 +427,17 @@ function performancePanel(rows, latestDraw) {
 }
 function schemeCatalogPanel(catalog = []) {
   if (expectedRole !== 'SUPER_ADMIN') return '';
-  return `<section class="workspace hidden" data-panel="schemes"><article class="card wide"><p class="muted">SCHEME CREATION</p><h2>Create scheme</h2><p class="muted">Give the scheme a name and define DABC prize levels.</p><form id="catalog-form" class="catalog-form">
-    <label class="catalog-name">Scheme name<input name="name" placeholder="Example: 3D-30-15K" minlength="1" maxlength="60" required></label>
-    <label>Pattern<input name="pattern" placeholder="Example: ABC" minlength="1" maxlength="8" pattern="[A-Za-z]+" required></label>
-    <label>4 Digit Prize<input name="fourDigitPrize" type="number" min="0" step="1" required></label>
-    <label>3 Digit Prize<input name="threeDigitPrize" type="number" min="0" step="1" required></label>
-    <label>2 Digit Prize<input name="twoDigitPrize" type="number" min="0" step="1" required></label>
-    <label>Single Digit Prize<input name="singleDigitPrize" type="number" min="0" step="1" required></label>
-    <label>Minimum Seller Price<input name="minimumRate" type="text" inputmode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" required></label>
-    <label>MRP<input name="mrp" type="text" inputmode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" required></label>
-    <label>Management Password<input name="actionPassword" type="password" autocomplete="off" required></label>
-    <button>Create scheme</button>
-  </form></article><article class="card wide"><h2>Scheme list</h2><p class="muted">Minimum, MRP and Prize values can be changed. Already-sold tickets keep their original snapshot.</p><label>Management Password for changes<input id="scheme-price-password" type="password" autocomplete="off"></label>${catalog.length ? `<table><thead><tr><th>Scheme</th><th>Pattern</th><th>Minimum</th><th>MRP</th><th>4D Prize</th><th>3D Prize</th><th>2D Prize</th><th>1D Prize</th><th>Status</th><th>Action</th></tr></thead><tbody>${catalog.map((item) => `<tr data-scheme-price-row="${escapeHtml(item.id)}"><td><strong>${escapeHtml(item.name)}</strong></td><td>${escapeHtml(item.pattern ?? '-')}</td><td><input type="text" inputmode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" data-price="minimumRate" value="${Number(item.minimumRate ?? 0)}" aria-label="${escapeHtml(item.name)} minimum"></td><td><input type="text" inputmode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" data-price="mrp" value="${Number(item.mrp ?? 0)}" aria-label="${escapeHtml(item.name)} MRP"></td><td><input type="number" min="0" step="1" data-prize="fourDigitPrize" value="${Number(item.fourDigitPrize ?? 0)}"></td><td><input type="number" min="0" step="1" data-prize="threeDigitPrize" value="${Number(item.threeDigitPrize ?? 0)}"></td><td><input type="number" min="0" step="1" data-prize="twoDigitPrize" value="${Number(item.twoDigitPrize ?? 0)}"></td><td><input type="number" min="0" step="1" data-prize="singleDigitPrize" value="${Number(item.singleDigitPrize ?? 0)}"></td><td>${item.enabled ? 'Active' : 'Disabled'}</td><td><button type="button" class="secondary save-scheme-price" data-scheme-id="${escapeHtml(item.id)}">Save</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted">No schemes created yet.</p>'}</article></section>`;
+  const amount = (name, label) => `<label>${label}<input name="${name}" type="number" min="0" step="0.01" required></label>`;
+  return `<section class="workspace hidden" data-panel="schemes"><article class="card wide"><h2>Create / Edit Scheme</h2><form id="catalog-form" class="catalog-form"><label>Select Scheme<select id="scheme-editor-select" name="id"><option value="">+ Create New Scheme</option>${catalog.map((scheme) => `<option value="${escapeHtml(scheme.id)}">${escapeHtml(scheme.name)}</option>`).join('')}</select></label><label>Scheme Name<input name="name" maxlength="60" required></label><label>Pattern<input name="pattern" maxlength="8" pattern="[A-Za-z]+" required></label>${amount('minimumRate', 'Minimum Seller Price')}${amount('mrp', 'MRP')}${amount('fourDigitPrize', '4 Digit Prize')}${amount('threeDigitPrize', '3 Digit Prize')}${amount('twoDigitPrize', '2 Digit Prize')}${amount('singleDigitPrize', 'Single Digit Prize')}<label>Mgt. PWD<input name="actionPassword" type="password" autocomplete="off" required></label><button id="scheme-editor-save">Create Scheme</button><p id="scheme-editor-message" role="status"></p></form></article></section>`;
+}
+function loadSchemeEditor() {
+  const form = document.querySelector('#catalog-form');
+  const scheme = currentDashboard.schemeCatalog.find((item) => item.id === form.elements.id.value);
+  for (const key of ['name', 'pattern', 'minimumRate', 'mrp', 'fourDigitPrize', 'threeDigitPrize', 'twoDigitPrize', 'singleDigitPrize']) form.elements[key].value = scheme?.[key] ?? (['name', 'pattern'].includes(key) ? '' : 0);
+  form.elements.pattern.readOnly = Boolean(scheme?.universal);
+  form.elements.actionPassword.value = '';
+  document.querySelector('#scheme-editor-save').textContent = scheme ? 'Update Scheme' : 'Create Scheme';
+  document.querySelector('#scheme-editor-message').textContent = '';
 }
 function lotCodePanel(boards = [], catalog = []) {
   if (expectedRole !== 'SUPER_ADMIN') return '';
@@ -409,7 +453,7 @@ function validityPanel(validity = {}, renewal = null) {
   const end = validity.endsAt ? new Date(validity.endsAt).toLocaleDateString('en-IN') : '—';
   const graceEnd = validity.graceEndsAt ? new Date(validity.graceEndsAt).toLocaleDateString('en-IN') : '—';
   const requestState = renewal ? `<span class="status ${renewal.status === 'APPROVED' ? 'profit' : 'break_even'}">${escapeHtml(renewal.status)}</span>` : '—';
-  return `<section class="workspace hidden" data-panel="validity"><article class="card wide"><h2>Account Validity</h2><div class="metrics"><div><span>Status</span><strong>${escapeHtml(validity.status ?? '—')}</strong></div><div><span>Valid Until</span><strong>${end}</strong></div><div><span>Days Left</span><strong>${Number(validity.daysRemaining ?? 0)}</strong></div><div><span>Grace Until</span><strong>${graceEnd}</strong></div><div><span>Grace Days</span><strong>${Number(validity.graceDaysRemaining ?? 0)}</strong></div><div><span>Renewal</span><strong>${requestState}</strong></div></div>${validity.renewalAvailable && renewal?.status !== 'PENDING' ? `<form id="renewal-request-form" class="inline-form"><label>Validity<select name="periodMonths"><option value="6">6 Months</option><option value="12">1 Year</option></select></label><button>Request Renewal</button></form>` : ''}${!validity.canOperate ? '<p class="error">Entry and Result Publish are blocked until Owner approval.</p>' : ''}</article></section>`;
+  return `<section class="workspace hidden" data-panel="validity"><article class="card wide"><h2>Account Validity</h2><div class="metrics"><div><span>Status</span><strong>${escapeHtml(validity.status ?? '—')}</strong></div><div><span>Valid Until</span><strong>${end}</strong></div><div><span>Days Left</span><strong>${Number(validity.daysRemaining ?? 0)}</strong></div><div><span>Grace Until</span><strong>${graceEnd}</strong></div><div><span>Grace Days</span><strong>${Number(validity.graceDaysRemaining ?? 0)}</strong></div><div><span>Renewal</span><strong>${requestState}</strong></div></div>${renewal?.status !== 'PENDING' ? `<form id="renewal-request-form" class="inline-form"><label>Validity<select name="periodMonths"><option value="6">6 Months</option><option value="12">1 Year</option></select></label><button ${validity.renewalAvailable ? '' : 'disabled'}>Request Validity Approval</button>${validity.renewalAvailable ? '' : '<span>Available 15 days before expiry.</span>'}</form>` : '<p>Validity approval pending with Owner.</p>'}${!validity.canOperate ? '<p class="error">Entry and Result Publish are blocked until Owner approval.</p>' : ''}</article></section>`;
 }
 function scheduleRow(id, label, start, end) {
   return `<div class="schedule-row" data-schedule-row="${id}"><label class="check"><input type="checkbox" name="schedule_${id}"> ${label}</label><label>Start<input type="time" name="start_${id}" value="${start}"></label><label>End<input type="time" name="end_${id}" value="${end}"></label></div>`;
@@ -418,7 +462,7 @@ function prizeGroup(title, schemes, values) {
   return `<fieldset class="prize-group"><legend>${title}</legend><div class="prize-grid">${schemes.map(([key, label]) => `<label><span>${label}</span><input name="${key}" type="number" min="0" step="1" value="${values[key]}" required></label>`).join('')}</div></fieldset>`;
 }
 function reportsWorkspace(reports = [], accounts) {
-  const rows = reports.slice(0, 100);
+  const rows = expectedRole === 'SUPER_ADMIN' ? reports : reports.slice(0, 100);
   const sellers = [...new Set(rows.map((item) => item.sellerName))];
   const totals = rows.reduce((sum, item) => ({ quantity: sum.quantity + Number(item.totalQuantity ?? 0), sales: sum.sales + Number(item.totalSales ?? 0), prize: sum.prize + Number(item.totalPrize ?? 0), bonus: sum.bonus + Number(item.totalBonus ?? 0), net: sum.net + Number(item.totalNet ?? 0) }), { quantity: 0, sales: 0, prize: 0, bonus: 0, net: 0 });
   const summary = `<div class="metrics report-summary"><div><span>Quantity</span><strong>${totals.quantity}</strong></div><div><span>Sales</span><strong>${money(totals.sales)}</strong></div><div><span>Prize</span><strong>${money(totals.prize)}</strong></div><div><span>Bonus</span><strong>${money(totals.bonus)}</strong></div><div><span>Net</span><strong>${money(totals.net)}</strong></div></div>`;
@@ -449,11 +493,14 @@ function sellerReportSuiteHtml(suite) {
   const itemRows = suite.itemReport.map((row) => `<tr><td>${escapeHtml(row.scheme)}</td><td>${row.quantity}</td><td>${money(row.amount)}</td><td>${money(row.winning)}</td></tr>`).join('');
   const winningRows = suite.winningReport.map((row) => `<tr><td>${escapeHtml(row.scheme)}</td><td>${row.quantity}</td><td>${money(row.amount)}</td><td>${money(row.winning)}</td></tr>`).join('');
   const billRows = suite.billWinningReport.map((row) => `<tr><td>${escapeHtml(row.billNumber)}</td><td>${escapeHtml(row.time)}</td><td>${row.quantity}</td><td>${money(row.amount)}</td><td>${money(row.prize)}</td></tr>`).join('');
-  const menu = `<article class="card wide report-suite-menu"><h2>Report Formats</h2><div class="panel-tabs seller-report-menu">${suite.menu.map((name, index) => `<button type="button" class="${index ? '' : 'active'}" data-seller-report-tab="${name}">${name.replace('_', ' ')}</button>`).join('')}</div></article>`;
+  const formats = expectedRole === 'SUPER_ADMIN' ? ['ENTRY', 'BILL_WINNING', 'ITEM', 'SALES_PAYMENT', 'SUMMARY'] : suite.menu;
+  const formatLabels = { ENTRY: 'Detailed Entry', BILL_WINNING: 'Bill Winning', ITEM: 'Item', SALES_PAYMENT: 'Payment & Sales', SUMMARY: 'Summary' };
+  const menu = `<article class="card wide report-suite-menu"><h2>Report Formats</h2><div class="panel-tabs seller-report-menu">${formats.map((name, index) => `<button type="button" class="${index ? '' : 'active'}" data-seller-report-tab="${name}">${formatLabels[name] ?? name.replace('_', ' ')}</button>`).join('')}</div></article>`;
   const heading = (title) => `<div class="report-suite-heading"><h2>${title}</h2><button type="button" class="secondary print-suite-report" data-print-title="${title}">Print</button></div>`;
   const itemTable = (title, rows) => `<article class="card wide suite-print-area">${heading(title)}<table><thead><tr><th>Scheme</th><th>Qty</th><th>Amount</th><th>Winning</th></tr></thead><tbody>${rows || '<tr><td colspan="4">No entries</td></tr>'}</tbody></table></article>`;
-  const metric = (title, values) => `<article class="card wide suite-print-area">${heading(title)}<div class="metrics suite-metrics">${Object.entries(values).map(([key, value]) => `<div><span>${escapeHtml(key.replaceAll('_', ' '))}</span><strong>${typeof value === 'number' && ['sales', 'prize', 'balance', 'amount'].some((word) => key.toLowerCase().includes(word)) ? money(value) : value}</strong></div>`).join('')}</div></article>`;
-  return `${menu}<div data-seller-report-panel="ENTRY">${reportDetailHtml(suite.report)}</div><div class="hidden" data-seller-report-panel="ITEM">${itemTable('Item Report', itemRows)}</div><div class="hidden" data-seller-report-panel="SALES">${metric('Sales Report', suite.salesReport)}</div><div class="hidden" data-seller-report-panel="WINNING">${itemTable('Winning Report', winningRows)}</div><div class="hidden" data-seller-report-panel="PAYMENT">${metric('Payment Report', suite.paymentReport)}</div><div class="hidden" data-seller-report-panel="BILL_WINNING"><article class="card wide suite-print-area">${heading('Bill Winning Report')}<table><thead><tr><th>Bill No.</th><th>Time</th><th>Qty</th><th>Amount</th><th>Prize</th></tr></thead><tbody>${billRows || '<tr><td colspan="5">No winning bills</td></tr>'}</tbody></table></article></div><div class="hidden" data-seller-report-panel="SUMMARY">${metric('Summary Report', suite.summaryReport)}</div>`;
+  const metric = (title, values) => `<article class="card wide suite-print-area">${heading(title)}<div class="metrics suite-metrics">${Object.entries(values).map(([key, value]) => `<div><span>${escapeHtml(key.replaceAll('_', ' '))}</span><strong>${typeof value === 'number' && ['sales', 'prize', 'balance', 'amount', 'bonus', 'net'].some((word) => key.toLowerCase().includes(word)) ? money(value) : value}</strong></div>`).join('')}</div></article>`;
+  const combined = { sales: suite.report.totalSales, prize: suite.report.totalPrize, bonus: suite.report.totalBonus, net: suite.report.totalNet };
+  return `${menu}<div data-seller-report-panel="ENTRY">${reportDetailHtml(suite.report)}</div><div class="hidden" data-seller-report-panel="ITEM">${itemTable('Item Report', itemRows)}</div>${expectedRole === 'SUPER_ADMIN' ? `<div class="hidden" data-seller-report-panel="SALES_PAYMENT">${metric('Payment & Sales Report', combined)}</div>` : `<div class="hidden" data-seller-report-panel="SALES">${metric('Sales Report', suite.salesReport)}</div><div class="hidden" data-seller-report-panel="WINNING">${itemTable('Winning Report', winningRows)}</div><div class="hidden" data-seller-report-panel="PAYMENT">${metric('Payment Report', suite.paymentReport)}</div>`}<div class="hidden" data-seller-report-panel="BILL_WINNING"><article class="card wide suite-print-area">${heading('Bill Winning Report')}<table><thead><tr><th>Bill No.</th><th>Time</th><th>Qty</th><th>Amount</th><th>Prize</th></tr></thead><tbody>${billRows || '<tr><td colspan="5">No winning bills</td></tr>'}</tbody></table></article></div><div class="hidden" data-seller-report-panel="SUMMARY">${metric('Summary Report', expectedRole === 'SUPER_ADMIN' ? { quantity: suite.report.totalQuantity, ...combined, winning_entries: suite.summaryReport.winningEntries, losing_entries: suite.summaryReport.losingEntries } : suite.summaryReport)}</div>`;
 }
 function printableReportHtml(report) {
   const rows = report.entries.map((entry) => `<tr><td>${entry.sequence}</td><td>${escapeHtml(entry.date)}</td><td>${escapeHtml(entry.billNumber)}</td><td>${escapeHtml(entry.time)}</td><td>${escapeHtml(report.boardCode)}</td><td>${escapeHtml(report.showLabel)}</td><td>${escapeHtml(entry.scheme)}</td><td>${escapeHtml(entry.enteredNumber)}</td><td>${entry.quantity}</td><td>${money(entry.rate)}</td><td>${money(entry.saleAmount)}</td><td>${money(entry.prizeAmount)}</td><td>${entry.matchRule ? `${escapeHtml(entry.matchRule)} · ${money(entry.unitPrize)} × ${entry.quantity}` : 'No prize'}</td><td>${money(entry.bonusAmount)} (${entry.bonusPercentage}%)</td><td>${money(entry.netAmount)}</td></tr>`).join('');
@@ -463,24 +510,78 @@ function wireReportActions() {
   document.querySelectorAll('.view-sample-report').forEach((button) => button.addEventListener('click', () => { document.querySelector('#report-detail').innerHTML = reportDetailHtml(sampleDetailedReport()); wireReportActions(); document.querySelector('#report-detail').scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
   document.querySelectorAll('.view-report').forEach((button) => button.addEventListener('click', () => openSaleReport(button.dataset.reportId)));
   document.querySelectorAll('.print-report').forEach((button) => button.addEventListener('click', async () => { const printWindow = window.open('', '_blank'); try { const report = button.dataset.reportId === 'sample' ? sampleDetailedReport() : await request(`/api/reports/sale?reportId=${encodeURIComponent(button.dataset.reportId)}`); printWindow.document.write(printableReportHtml(report)); printWindow.document.close(); } catch (error) { printWindow?.close(); notify(error.message, true); } }));
-  document.querySelectorAll('.print-suite-report').forEach((button) => button.addEventListener('click', () => {
+  wireSuitePrintButtons();
+  wireReportFilterActions();
+}
+function wireSuitePrintButtons() {
+  document.querySelectorAll('.print-suite-report').forEach((button) => { button.onclick = () => {
     const area = button.closest('.suite-print-area');
     const printWindow = window.open('', '_blank');
     if (!printWindow || !area) return;
     printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(button.dataset.printTitle)}</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#111}button{display:none}.metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.metrics>div{border:1px solid #999;padding:10px}.metrics span{display:block;color:#555;font-size:11px}.metrics strong{display:block;font-size:18px;margin-top:5px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:7px;text-align:left}</style></head><body>${area.innerHTML}<script>window.onload=()=>window.print()<\/script></body></html>`);
     printWindow.document.close();
-  }));
+  }; });
+}
+function wireReportFilterActions() {
   document.querySelectorAll('.report-correction-form').forEach((form) => form.addEventListener('submit', async (event) => { event.preventDefault(); try { const report = await request('/api/reports/sale-entry', { method: 'PUT', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); document.querySelector('#report-detail').innerHTML = reportDetailHtml(report); wireReportActions(); notify('Correction saved with permanent audit history'); } catch (error) { notify(error.message, true); } }));
   document.querySelectorAll('[data-seller-report-tab]').forEach((button) => button.addEventListener('click', () => {
     document.querySelectorAll('[data-seller-report-tab]').forEach((item) => item.classList.toggle('active', item === button));
     document.querySelectorAll('[data-seller-report-panel]').forEach((panel) => panel.classList.toggle('hidden', panel.dataset.sellerReportPanel !== button.dataset.sellerReportTab));
   }));
-  document.querySelector('#report-filter')?.addEventListener('change', (event) => {
+  const reportFilter = document.querySelector('#report-filter');
+  if (expectedRole === 'SUPER_ADMIN' && reportFilter && !reportFilter.dataset.ready) {
+    reportFilter.dataset.ready = 'true';
+    reportFilter.elements.date.value = indiaDateOffset();
+    const boards = currentDashboard?.boards ?? [];
+    const lotCodes = [...new Set([...boards.map((board) => board.code), ...currentReports.map((report) => report.boardCode)])];
+    reportFilter.elements.lot.innerHTML = '<option value="">All</option>' + lotCodes.map((code) => `<option>${escapeHtml(code)}</option>`).join('');
+    const syncShows = () => {
+      const lot = reportFilter.elements.lot.value;
+      const previous = reportFilter.elements.show.value;
+      const shows = [...new Set([
+        ...boards.filter((board) => !lot || board.code === lot).flatMap((board) => (board.schedules ?? []).filter((show) => show.enabled).map((show) => show.label)),
+        ...currentReports.filter((report) => !lot || report.boardCode === lot).map((report) => report.showLabel)
+      ])].filter(Boolean);
+      reportFilter.elements.show.innerHTML = '<option value="">All</option>' + shows.map((show) => `<option>${escapeHtml(show)}</option>`).join('');
+      reportFilter.elements.show.value = shows.includes(previous) ? previous : '';
+    };
+    const applyFilters = () => {
+      if (!reportFilter.elements.date.value) reportFilter.elements.date.value = indiaDateOffset();
+      const values = Object.fromEntries(new FormData(reportFilter));
+      const matches = (date, seller, lot, show) => date === values.date && (!values.seller || seller === values.seller) && (!values.lot || lot === values.lot) && (!values.show || show === values.show);
+      document.querySelectorAll('.report-list tbody tr').forEach((row) => {
+        row.hidden = !matches(row.dataset.date, row.dataset.seller, row.dataset.lot, row.dataset.show);
+      });
+      const rows = currentReports.filter((row) => matches(row.businessDate, row.sellerName, row.boardCode, row.showLabel));
+      const fields = ['totalQuantity', 'totalSales', 'totalPrize', 'totalBonus', 'totalNet'];
+      document.querySelectorAll('.report-summary strong').forEach((element, index) => {
+        const total = rows.reduce((sum, row) => sum + Number(row[fields[index]] ?? 0), 0);
+        element.textContent = index === 0 ? String(total) : money(total);
+      });
+      const detail = document.querySelector('#report-detail');
+      if (detail) detail.innerHTML = '';
+      let empty = document.querySelector('#report-filter-empty');
+      if (!empty) {
+        empty = document.createElement('p');
+        empty.id = 'report-filter-empty';
+        reportFilter.after(empty);
+      }
+      empty.textContent = rows.length ? '' : 'No reports for the selected filters.';
+    };
+    reportFilter.addEventListener('submit', (event) => event.preventDefault());
+    reportFilter.addEventListener('change', () => { syncShows(); applyFilters(); });
+    syncShows();
+    applyFilters();
+  }
+  if (expectedRole !== 'SUPER_ADMIN') reportFilter?.addEventListener('change', (event) => {
     const values = Object.fromEntries(new FormData(event.currentTarget));
     document.querySelectorAll('.report-list tbody tr').forEach((row) => { row.hidden = Boolean((values.date && row.dataset.date !== values.date) || (values.seller && row.dataset.seller !== values.seller) || (values.lot && row.dataset.lot !== values.lot) || (values.show && row.dataset.show !== values.show)); });
   });
 }
 function wireActions() {
+  const dailyFilter = document.querySelector('#daily-account-filter');
+  dailyFilter?.addEventListener('submit', (event) => { event.preventDefault(); loadDailyAccounts(); });
+  dailyFilter?.elements.sellerId.addEventListener('change', loadDailyAccounts);
   document.querySelectorAll('.inline-result-form').forEach((form) => form.addEventListener('submit', prepareResultPublish));
   wireReportActions();
   document.querySelector('#preview-form')?.addEventListener('submit', previewResult);
@@ -617,13 +718,23 @@ function wireActions() {
     try { await request('/api/settings/boards', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); notify('Lot Code added'); await renderDashboard(); switchPanel('lot-codes'); }
     catch (error) { notify(error.message, true); }
   });
+  document.querySelector('#scheme-editor-select')?.addEventListener('change', loadSchemeEditor);
+  if (document.querySelector('#catalog-form')) loadSchemeEditor();
   document.querySelector('#catalog-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
     for (const key of ['fourDigitPrize', 'threeDigitPrize', 'twoDigitPrize', 'singleDigitPrize', 'minimumRate', 'mrp']) values[key] = Number(values[key]);
     values.defaultRate = values.mrp;
-    try { await request('/api/settings/scheme-catalog', { method: 'POST', body: JSON.stringify(values) }); notify('Scheme created'); await renderDashboard(); switchPanel('schemes'); }
-    catch (error) { notify(error.message, true); }
+    const button = event.currentTarget.querySelector('button');
+    button.disabled = true;
+    try {
+      const saved = await request('/api/settings/scheme-catalog', { method: values.id ? 'PUT' : 'POST', body: JSON.stringify(values) });
+      await renderDashboard(); switchPanel('schemes');
+      document.querySelector('#scheme-editor-select').value = saved.id;
+      loadSchemeEditor();
+      document.querySelector('#scheme-editor-message').textContent = values.id ? 'Scheme updated.' : 'Scheme created. Assign it to the required Lot Codes and Sellers.';
+    } catch (error) { document.querySelector('#scheme-editor-message').textContent = error.message; }
+    finally { button.disabled = false; }
   });
   document.querySelectorAll('.save-scheme-price').forEach((button) => button.addEventListener('click', async () => {
     const row = button.closest('[data-scheme-price-row]');

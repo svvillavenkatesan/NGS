@@ -10,6 +10,7 @@ import { calculateTierProfits, validatePricingHierarchy } from './services/prici
 import { findOpenSchedule, minutesInTimeZone, resultPublishReady } from './services/schedule-engine.js';
 import { licenseStatus, requireOperationalLicense } from './license.js';
 import { accountLicenseStatus, issueAccountLicense } from './account-license.js';
+import { dailyRange, dailyLedger, validateDailyPayment } from './services/daily-ledger.js';
 
 const port = Number(process.env.PORT ?? 4000);
 const root = resolve(import.meta.dirname, '../..');
@@ -295,6 +296,12 @@ const routes = {
     requireActionPassword(body, user, 'management');
     const scheme = store.settings.schemeCatalog.find((item) => item.id === body.id);
     if (!scheme) return fail(404, 'Scheme not found');
+    const name = String(body.name ?? scheme.name).trim();
+    const pattern = String(body.pattern ?? scheme.pattern).trim().toUpperCase();
+    if (!name || name.length > 60) return fail(400, 'Scheme name must contain 1 to 60 characters');
+    if (store.settings.schemeCatalog.some((item) => item.id !== scheme.id && item.name.toLowerCase() === name.toLowerCase())) return fail(409, 'Scheme name already exists');
+    if (!/^[A-Z]{1,8}$/.test(pattern)) return fail(400, 'Pattern must contain 1 to 8 letters');
+    if (scheme.universal && pattern !== scheme.pattern) return fail(400, 'Common scheme pattern cannot be changed');
     const defaultRate = Number(body.defaultRate);
     const minimumRate = Number(body.minimumRate);
     const mrp = Number(body.mrp);
@@ -306,14 +313,15 @@ const routes = {
       if (!Number.isFinite(value) || value < 0) return fail(400, `${field} must be a non-negative amount`);
       prizeUpdates[field] = value;
     }
-    Object.assign(scheme, { defaultRate, minimumRate, mrp, ...prizeUpdates });
+    const previous = { ...scheme };
+    Object.assign(scheme, { name, pattern, defaultRate, minimumRate, mrp, ...prizeUpdates });
     for (const account of store.users.filter((item) => ['DISTRIBUTOR', 'SELLER'].includes(item.role))) {
       for (const rates of Object.values(account.lotCodeSchemeRates ?? {})) {
         if (rates[scheme.id]?.enabled && Number(rates[scheme.id].rate) < minimumRate) rates[scheme.id].rate = minimumRate;
       }
       if (account.lotCodeSchemeRates) account.catalogSchemeRates = mergeCatalogSchemeRates(account.lotCodeSchemeRates);
     }
-    audit(user.id, 'SCHEME_PRICING_AND_PRIZES_UPDATED', 'schemeCatalog', scheme.id, { defaultRate, minimumRate, mrp, ...prizeUpdates });
+    audit(user.id, 'SCHEME_PRICING_AND_PRIZES_UPDATED', 'schemeCatalog', scheme.id, { previous, name, pattern, defaultRate, minimumRate, mrp, ...prizeUpdates });
     return ok(scheme);
   },
   'GET /api/users': ({ user }) => ok(visibleUsers(user).map((item) => ({ ...publicUser(item), passwordResetPending: store.passwordResetRequests.some((request) => request.userId === item.id && request.status === 'PENDING') }))),
@@ -650,6 +658,32 @@ const routes = {
     audit(user.id, !preview.meetsMinimumProfit ? 'DRAW_PUBLISHED_WITH_TARGET_OVERRIDE' : 'DRAW_PUBLISHED_AND_LOCKED', 'draw', draw.id, { ...scope, overrideReason: draw.overrideReason });
     broadcast({ event: 'draw.published', draw });
     return created({ draw, preview, belowTarget: !preview.meetsMinimumProfit });
+  },
+  'GET /api/reports/seller-daily': ({ user, url }) => {
+    requireRole(user, 'SUPER_ADMIN');
+    const seller = store.users.find((item) => item.id === url.searchParams.get('sellerId') && item.parentId === user.id && item.role === 'SELLER');
+    if (!seller) return fail(404, 'Seller not found');
+    const range = dailyRange(url.searchParams.get('from'), url.searchParams.get('to'), localDateKey());
+    return ok(buildDailySellerAccount(seller, range));
+  },
+  'POST /api/seller-daily-payments': ({ user, body }) => {
+    requireRole(user, 'SUPER_ADMIN');
+    requireActionPassword(body, user, 'management');
+    const seller = store.users.find((item) => item.id === body.sellerId && item.parentId === user.id && item.role === 'SELLER');
+    if (!seller) return fail(404, 'Seller not found');
+    const range = dailyRange(body.accountDate, body.accountDate, localDateKey());
+    if (range.from !== body.accountDate) return fail(400, 'Account date required');
+    if (!/^[a-zA-Z0-9-]{16,80}$/.test(body.requestId ?? '')) return fail(400, 'Payment request ID required');
+    const existing = store.dailySellerPayments.find((item) => item.requestId === body.requestId && item.ownerId === user.id);
+    if (existing) {
+      if (existing.sellerId !== seller.id || existing.accountDate !== body.accountDate) return fail(409, 'Payment request already used');
+      return ok({ payment: existing, duplicate: true });
+    }
+    const day = buildDailySellerAccount(seller, range).days[0];
+    const values = validateDailyPayment(body, day);
+    const payment = createRecord('dailySellerPayments', { ...values, sellerId: seller.id, ownerId: user.id, accountDate: body.accountDate, requestId: body.requestId, reference: String(body.reference ?? '').trim().slice(0, 200), recordedBy: user.id });
+    audit(user.id, 'DAILY_SELLER_PAYMENT_RECORDED', 'dailySellerPayment', payment.id, { sellerId: seller.id, accountDate: body.accountDate, ...values });
+    return created({ payment });
   },
   'GET /api/reports/weekly-accounts': ({ user, url }) => {
     requireRole(user, 'SUPER_ADMIN');
@@ -1266,6 +1300,13 @@ function weekRange(input) {
   local.setDate(local.getDate() + 6);
   const weekEnd = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`;
   return { weekStart, weekEnd };
+}
+
+function buildDailySellerAccount(seller, range) {
+  const reports = store.saleReports.filter((row) => row.sellerId === seller.id && row.businessDate >= range.from && row.businessDate <= range.to).map(reportSummary);
+  const payments = store.dailySellerPayments.filter((row) => row.sellerId === seller.id && row.ownerId === seller.parentId);
+  const legacyPayments = store.weeklyPayments.filter((row) => row.distributorId === seller.id && row.receivedBy === seller.parentId);
+  return { seller: { id: seller.id, name: seller.name, code: seller.sellerCode }, ...range, days: dailyLedger(reports, payments, range.from, range.to), legacyPayments };
 }
 
 function buildWeeklyAccounts(selectedDate, superAdminId = 'admin-1') {

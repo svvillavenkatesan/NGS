@@ -11,6 +11,7 @@ const defaultSchemeRates = { 'scheme-3d-25-10k': 25, 'scheme-3d-30-15k': 30, 'sc
 const initialRateFor = (id) => defaultSchemeRates[id] ?? (['scheme-ab', 'scheme-ac', 'scheme-bc', 'scheme-all-doubles'].includes(id) ? 15 : 13);
 
 export const store = {
+  dailySellerPayments: [],
   security: { resultPasswordHash: null, managementPasswordHash: null },
   settings: {
     subDistributorEnabled: false,

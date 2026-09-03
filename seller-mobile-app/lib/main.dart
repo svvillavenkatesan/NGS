@@ -62,10 +62,12 @@ class _Login extends State<Login> {
         throw Exception('Seller account required');
       }
       if (mounted) {
-        Navigator.pushReplacement(context,
-            MaterialPageRoute(builder: (_) => d['user']['mustChangePassword'] == true
-                ? RequiredPasswordChange(token: d['token'])
-                : Entry(token: d['token'])));
+        Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+                builder: (_) => d['user']['mustChangePassword'] == true
+                    ? RequiredPasswordChange(token: d['token'])
+                    : Entry(token: d['token'])));
       }
     } catch (e) {
       setState(() => error = e.toString().replaceFirst('Exception: ', ''));
@@ -129,7 +131,12 @@ class _RequiredPasswordChange extends State<RequiredPasswordChange> {
   bool busy = false;
   String error = '';
   @override
-  void dispose() { password.dispose(); confirm.dispose(); super.dispose(); }
+  void dispose() {
+    password.dispose();
+    confirm.dispose();
+    super.dispose();
+  }
+
   Future<void> save() async {
     if (password.text.length < 8 || password.text != confirm.text) {
       setState(() => error = 'Enter matching PWDs with at least 8 characters');
@@ -138,27 +145,49 @@ class _RequiredPasswordChange extends State<RequiredPasswordChange> {
     setState(() => busy = true);
     try {
       final response = await http.put(Uri.parse('$api/api/me/password'),
-          headers: headers(widget.token), body: jsonEncode({'newPassword': password.text}));
-      if (response.statusCode != 200) throw Exception(jsonDecode(response.body)['error']);
+          headers: headers(widget.token),
+          body: jsonEncode({'newPassword': password.text}));
+      if (response.statusCode != 200) {
+        throw Exception(jsonDecode(response.body)['error']);
+      }
       if (!mounted) return;
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Login()));
+      Navigator.pushReplacement(
+          context, MaterialPageRoute(builder: (_) => const Login()));
     } catch (e) {
-      if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
-    } finally { if (mounted) setState(() => busy = false); }
+      if (mounted) {
+        setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
   }
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Set New PWD')),
-    body: SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        TextField(controller: password, obscureText: true, decoration: const InputDecoration(labelText: 'New PWD')),
-        TextField(controller: confirm, obscureText: true, decoration: const InputDecoration(labelText: 'Confirm New PWD')),
-        const SizedBox(height: 16),
-        FilledButton(onPressed: busy ? null : save, child: Text(busy ? 'Saving...' : 'Save New PWD')),
-        if (error.isNotEmpty) Text(error, style: const TextStyle(color: Colors.redAccent)),
-      ],
-    )),
-  );
+        appBar: AppBar(title: const Text('Set New PWD')),
+        body: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                    controller: password,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: 'New PWD')),
+                TextField(
+                    controller: confirm,
+                    obscureText: true,
+                    decoration:
+                        const InputDecoration(labelText: 'Confirm New PWD')),
+                const SizedBox(height: 16),
+                FilledButton(
+                    onPressed: busy ? null : save,
+                    child: Text(busy ? 'Saving...' : 'Save New PWD')),
+                if (error.isNotEmpty)
+                  Text(error, style: const TextStyle(color: Colors.redAccent)),
+              ],
+            )),
+      );
 }
 
 class Entry extends StatefulWidget {
@@ -169,8 +198,7 @@ class Entry extends StatefulWidget {
 }
 
 class _Entry extends State<Entry> {
-  final number = TextEditingController(),
-      qty = TextEditingController();
+  final number = TextEditingController(), qty = TextEditingController();
   final numberFocus = FocusNode();
   final List<Map<String, dynamic>> cart = [];
   final List<Map<String, dynamic>> previousBills = [];
@@ -860,6 +888,11 @@ class _Entry extends State<Entry> {
           (suite['winningReport'] as List).cast<Map<String, dynamic>>();
       final bills =
           (suite['billWinningReport'] as List).cast<Map<String, dynamic>>();
+      final combinedReport = <String, dynamic>{
+        ...(suite['salesReport'] as Map).cast<String, dynamic>(),
+        ...(suite['paymentReport'] as Map).cast<String, dynamic>(),
+        ...(suite['summaryReport'] as Map).cast<String, dynamic>(),
+      }..remove('amount'); // Sales is the same amount; display it only once.
       final billNumbers =
           entries.map((row) => '${row['billNumber']}').toSet().toList();
       String? selectedBill = billNumbers.firstOrNull;
@@ -984,7 +1017,7 @@ class _Entry extends State<Entry> {
           isScrollControlled: true,
           builder: (sheetContext) => StatefulBuilder(
               builder: (sheetContext, setSheetState) => DefaultTabController(
-                  length: 7,
+                  length: 5,
                   child: SafeArea(
                       child: SizedBox(
                           height: MediaQuery.of(sheetContext).size.height * .86,
@@ -992,25 +1025,17 @@ class _Entry extends State<Entry> {
                             const TabBar(isScrollable: true, tabs: [
                               Tab(text: 'ENTRY'),
                               Tab(text: 'ITEM'),
-                              Tab(text: 'SALES'),
+                              Tab(text: 'SUMMARY'),
                               Tab(text: 'WINNING'),
-                              Tab(text: 'PAYMENT'),
                               Tab(text: 'BILL WINNING'),
-                              Tab(text: 'SUMMARY')
                             ]),
                             Expanded(
                                 child: TabBarView(children: [
                               entryRows(setSheetState),
                               schemeRows(items, 'ITEM REPORT'),
                               metrics(
-                                  (suite['salesReport'] as Map)
-                                      .cast<String, dynamic>(),
-                                  'SALES REPORT'),
+                                  combinedReport, 'SALES & PAYMENT SUMMARY'),
                               schemeRows(wins, 'WINNING REPORT'),
-                              metrics(
-                                  (suite['paymentReport'] as Map)
-                                      .cast<String, dynamic>(),
-                                  'PAYMENT REPORT'),
                               Column(children: [
                                 printButton(
                                     'PRINT BILL WINNING',
@@ -1036,10 +1061,6 @@ class _Entry extends State<Entry> {
                                                         TextAlign.right)))
                                             .toList())),
                               ]),
-                              metrics(
-                                  (suite['summaryReport'] as Map)
-                                      .cast<String, dynamic>(),
-                                  'SUMMARY REPORT')
                             ]))
                           ]))))));
     } catch (e) {
@@ -1238,7 +1259,13 @@ class _Entry extends State<Entry> {
                           child: Text('$q'))))
                   .toList()),
           const SizedBox(height: 10),
-          FilledButton(onPressed: add, child: const Text('Add to Bill')),
+          Row(children: [
+            Expanded(
+                child: Text('${cart.length} entries added',
+                    style: const TextStyle(fontWeight: FontWeight.w600))),
+            const SizedBox(width: 8),
+            FilledButton(onPressed: add, child: const Text('Add to Bill')),
+          ]),
           if (cart.isNotEmpty)
             Container(
                 margin: const EdgeInsets.only(top: 7),
@@ -1249,14 +1276,13 @@ class _Entry extends State<Entry> {
                     borderRadius: BorderRadius.circular(9),
                     border: Border.all(color: const Color(0xff51326d))),
                 child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      Text('${cart.length} entries'),
                       Text('Total  ₹${total.toStringAsFixed(0)}',
                           style: const TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold))
                     ])),
-          if (note.isNotEmpty)
+          if (note.isNotEmpty && !RegExp(r'^\d+ entries added$').hasMatch(note))
             Padding(padding: const EdgeInsets.all(8), child: Text(note)),
           const Divider(),
           ...cart.reversed.toList().asMap().entries.map((e) => Container(
